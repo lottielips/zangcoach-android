@@ -1534,7 +1534,7 @@ function makeLimiter(c,thr){
 }
 function ensureCtx(){
   S.ctxTouch=performance.now();
-  if(S.ctx){if(S.ctx.state==='suspended'&&S.idleSusp){S.idleSusp=false;S.ctx.resume();}return;}
+  if(S.ctx){ctxWake();return;}
   const C=window.AudioContext||window.webkitAudioContext;
   let c;try{c=new C({latencyHint:'balanced'});}catch(e){c=new C();}
   S.ctx=c;
@@ -1556,7 +1556,9 @@ function ensureCtx(){
   // tape-stop: een vertraging die steeds langer wordt laat alles trager en lager klinken
   S.tape=c.createDelay(2);S.tape.delayTime.value=0;S.tapeG=c.createGain();
   S.dry.connect(comp);S.wet.connect(comp);S.chop=c.createGain();comp.connect(S.chop);S.chop.connect(S.tape);S.tape.connect(S.tapeG);S.tapeG.connect(S.out);
-  const lim=makeLimiter(c);S.lim=lim;S.limIn=lim.input;S.out.connect(lim.input);lim.connect(c.destination);
+  const lim=makeLimiter(c);S.lim=lim;S.limIn=lim.input;S.out.connect(lim.input);
+  // eindpoort: na het stoppen en uitklinken gaat die zacht dicht, daarna wordt de geluidsstroom afgesloten (zie ctxSleep)
+  S.endG=c.createGain();S.endG.connect(c.destination);lim.connect(S.endG);
   // opname: muziek + (optioneel) stem samen, met een eigen begrenzer
   try{
     S.recDest=c.createMediaStreamDestination();
@@ -1565,11 +1567,11 @@ function ensureCtx(){
   }catch(e){S.recDest=null;}
   // galm
   S.revIn=c.createGain();const conv=c.createConvolver();S.conv=conv;conv.buffer=makeImpulse(c,P.master.room||'zaal');S.lastRoom=P.master.room||'zaal';
-  const revOut=c.createGain();revOut.gain.value=0.9;
+  const revOut=c.createGain();revOut.gain.value=0.9;S.revOut=revOut;
   S.revIn.connect(conv);conv.connect(revOut);revOut.connect(S.master);
   // echo
   S.dlyIn=c.createGain();S.delay=c.createDelay(3);S.fb=c.createGain();
-  const dlp=c.createBiquadFilter();dlp.type='lowpass';dlp.frequency.value=2600;
+  const dlp=c.createBiquadFilter();dlp.type='lowpass';dlp.frequency.value=2600;S.dlp=dlp;
   S.dlyIn.connect(S.delay);S.delay.connect(dlp);dlp.connect(S.fb);S.fb.connect(S.delay);
   const dOut=c.createGain();dOut.gain.value=0.7;dlp.connect(dOut);dOut.connect(S.master);
   // sporen
@@ -1596,7 +1598,7 @@ function ensureCtx(){
   let lp=0;for(let i=0;i<vl;i++){lp=lp*0.97+(Math.random()*2-1)*0.03;vd[i]=lp*0.6;if(Math.random()<0.0004){const a=(Math.random()*0.8+0.2)*(Math.random()<.5?-1:1);for(let k=0;k<30&&i+k<vl;k++)vd[i+k]+=a*Math.exp(-k/5);}}
   const vs=c.createBufferSource();vs.buffer=vb;vs.loop=true;const vf=c.createBiquadFilter();vf.type='bandpass';vf.frequency.value=2500;vf.Q.value=0.4;
   S.vinylG=c.createGain();S.vinylG.gain.value=0;vs.connect(vf);vf.connect(S.vinylG);S.vinylG.connect(S.master);vs.start();
-  S.metroBus=c.createGain();S.metroBus.gain.value=0.5;S.metroBus.connect(c.destination);
+  S.metroBus=c.createGain();S.metroBus.gain.value=0.5;S.metroBus.connect(S.endG);
   applyMix();preloadKit();preloadInst();
   setInterval(autoLevelTick,100);
 }
@@ -1618,7 +1620,7 @@ function applyMix(){
   S.lofiLP.frequency.setTargetAtTime(12000*Math.pow(2200/12000,lf),t,0.03);
   S.wet.gain.setTargetAtTime(lf>0?Math.min(1,lf*2):0,t,0.02);
   S.dry.gain.setTargetAtTime(1-Math.min(1,lf*2),t,0.02);
-  S.vinylG.gain.setTargetAtTime((M.vinyl||0)/100*0.06,t,0.05);
+  S.vinylG.gain.setTargetAtTime(S.playing?(M.vinyl||0)/100*0.06:0,t,0.05); // alleen tijdens het afspelen
   for(const b of ['chords','A','B'])setColor(b,(P.color&&P.color[b])||'normaal');
   S.fb.gain.setTargetAtTime(M.fb/100,t,0.02);
   S.delay.delayTime.setTargetAtTime(Math.min(2.9,M.dly*60/P.bpm/4),t,0.05);
@@ -2049,16 +2051,35 @@ function playStep(abs,t0,sd,spb){
   if(S.vrec&&S.vrec.armed&&pos===0&&t0>S.ctx.currentTime+0.02){S.vrec.startStep=step;S.vrec.t0=t0;S.vrec.sd=sd;S.vrec.armed=false;}
 }
 function sched(){
-  const spb=60/P.bpm,sd=spb/4;S.sd=sd;
-  while(S.nextT<S.ctx.currentTime+0.15){
+  if(!S.playing)return;
+  const spb=60/P.bpm,sd=spb/4,now=S.ctx.currentTime;S.sd=sd;
+  // op de achtergrond (scherm uit) verder vooruit plannen: Android laat de app dan minder vaak aan de beurt
+  const ahead=document.hidden?1.5:0.15;
+  // na een hapering: gemiste stappen overslaan in plaats van ze allemaal tegelijk af te vuren
+  if(S.nextT<now-0.25){const k=Math.ceil((now-S.nextT)/sd);S.nextT+=k*sd;S.step+=k;}
+  while(S.nextT<now+ahead){
     playStep(S.step,S.nextT,sd,spb);
     S.nextT+=sd;S.step++;
   }
 }
+// Eigen klok in een Worker: timers in de pagina zelf worden afgeremd als het scherm uitgaat.
+function startTimer(){
+  stopTimer();
+  if(S.wtimer===undefined){
+    try{
+      const u=URL.createObjectURL(new Blob(['let i=null;onmessage=e=>{clearInterval(i);i=null;if(e.data>0)i=setInterval(()=>postMessage(0),e.data);};'],{type:'text/javascript'}));
+      S.wtimer=new Worker(u);S.wtimer.onmessage=()=>{if(S.playing)sched();};
+    }catch(e){S.wtimer=null;}
+  }
+  if(S.wtimer)S.wtimer.postMessage(25);
+  S.timer=setInterval(sched,S.wtimer?250:25); // reserve, ook als de Worker ooit stilvalt
+}
+function stopTimer(){if(S.wtimer)S.wtimer.postMessage(0);clearInterval(S.timer);S.timer=null;}
 function curRhythm(){return RHYTHMS.find(r=>r.id===P.rhythm)||RHYTHMS[0];}
 const CHORD_VEL={pad:0.07,pluck:0.085,mute:0.06};
 
 function play(){
+  if(S.playing)return; // nooit twee planners tegelijk
   ensureCtx();
   try{window.ZangcoachApp&&window.ZangcoachApp.playing&&window.ZangcoachApp.playing(true);}catch(e){}
   if(!curKey()){
@@ -2075,15 +2096,16 @@ function play(){
   refreshChords();
   applyMix();
   sched();
-  S.timer=setInterval(sched,25);
+  startTimer();
   renderPlay();renderKey();
 }
 function stop(){
   if(!S.playing) return;
   try{window.ZangcoachApp&&window.ZangcoachApp.playing&&window.ZangcoachApp.playing(false);}catch(e){}
-  clearInterval(S.timer);S.playing=false;
+  stopTimer();S.playing=false;S.stopTok=(S.stopTok||0)+1;S.ctxTouch=performance.now();
   const gs=S.gates,now=S.ctx.currentTime;
   for(const b in gs){gs[b].gain.setTargetAtTime(0,now,0.06);}
+  if(S.vinylG)S.vinylG.gain.setTargetAtTime(0,now,0.08);
   setTimeout(()=>{for(const b in gs){try{gs[b].disconnect();}catch(e){}}},900);
   S.gates=null;S.playKey=null;S.vq=[];S.sq=[];S.curIdx=-1;S.curPos=-1;S.queued=null;renderParts();
   if(S.hum)cancelHum('Inneuriën afgebroken omdat de muziek stopte. Er is niets veranderd.');
@@ -3116,7 +3138,7 @@ function randomMel(){
   msg('Nieuwe '+(tr==='A'?'melodie':'baslijn')+'. Nog eens drukken geeft een andere.');
 }
 function applyScene(i){
-  const sc=SCENES[i];
+  const sc=SCENES[i],tok=S.stopTok||0;
   ensureCtx();S.ctx.resume();
   pushUndo();
   const p=defaultProject();
@@ -3142,7 +3164,7 @@ function applyScene(i){
   if(S.playing){S.playKey=curKey()||S.manual;}
   syncControls();renderAll();applyMix();
   const loads=[P.mel.A.inst,P.mel.B.inst,P.chordInst].map(loadInst).filter(x=>x&&x.then);
-  if(loads.length){msg('Instrumenten laden…');Promise.all(loads).then(()=>{if(!S.playing)play();msg('"'+sc.n+'" staat klaar in '+keyName(musicKey())+'.');});return;}
+  if(loads.length){msg('Instrumenten laden…');Promise.all(loads).then(()=>{if(!S.playing&&(S.stopTok||0)===tok)play();msg('"'+sc.n+'" staat klaar in '+keyName(musicKey())+'.');});return;}
   if(!S.playing)play();
   msg('"'+sc.n+'" staat klaar in '+keyName(musicKey())+'. Pas nu alles aan zoals je wil.');
 }
@@ -3644,7 +3666,7 @@ function applyBusFx(b,type,amt){
   if(B.fx)B.fx.set(amt,P.bpm);
 }
 function autoLevelTick(){
-  if(!S.ctx)return;
+  if(!S.ctx||S.ctx.state!=='running')return;
   const t=S.ctx.currentTime,rms=(an,buf)=>{an.getFloatTimeDomainData(buf);let q=0;for(let i=0;i<buf.length;i++)q+=buf[i]*buf[i];return Math.sqrt(q/buf.length);};
   const list=[...S.autos];for(const b in S.bus){const fx=S.bus[b].fx;if(fx&&fx.auto)list.push(fx.auto);}
   for(const A of list){
@@ -4913,24 +4935,60 @@ function smpPickSection(box,row,ch){
 
 
 /* ---------- geluidsmotor stilleggen als er niets gebeurt ---------- */
-// Een open geluidsstroom kan op sommige toestellen en koptelefoons ruisen, ook als er niets klinkt,
-// en kost batterij. Na 6 seconden zonder klank (en zonder microfoon of opname) gaat hij stil;
-// de volgende tik of klank maakt hem meteen weer wakker.
+// Een open geluidsstroom kan op sommige toestellen en (Bluetooth-)koptelefoons ruisen, ook als er
+// niets klinkt, en kost batterij. Na het stoppen (of na een tik op een pad) mogen galm en echo eerst
+// natuurlijk uitklinken; daarna gaat de eindpoort zacht dicht, worden galm en echo leeggemaakt (anders
+// komt de oude staart terug bij de volgende tik) en wordt de stroom afgesloten. Elke klank of tik
+// maakt alles meteen weer wakker.
 function ctxBusy(){return !!(S.playing||S.stream||S.rec||S.srec||S.drone||S.hum||S.vrec);}
-function ctxSleep(){
-  const c=S.ctx;if(!c||c.state!=='running'||ctxBusy())return;
-  S.idleSusp=true;c.suspend().catch(()=>{S.idleSusp=false;});
+function tailMs(){
+  const M=P.master,rt=(ROOMS[M.room||'zaal']||ROOMS.zaal).rt;
+  return 1000*Math.min(2.6,0.4+0.4*rt+(M.fb||0)/100);
+}
+function ctxWake(){
+  const c=S.ctx;if(!c)return;
+  S.ctxTouch=Math.max(S.ctxTouch||0,performance.now());
+  if(S.sleepT){clearTimeout(S.sleepT);S.sleepT=null;}
+  if(S.endG&&S.endG.gain.value<1){const t=c.currentTime,g=S.endG.gain;g.cancelScheduledValues(t);g.setValueAtTime(g.value,t);g.linearRampToValueAtTime(1,t+0.01);}
+  if(c.state==='suspended'){S.idleSusp=false;c.resume();}
+}
+// Galm, echo en effecten met een staart vervangen door verse exemplaren (zelfde instellingen).
+function flushTails(){
+  const c=S.ctx;if(!c)return;
+  try{
+    const nc=c.createConvolver();nc.buffer=S.conv.buffer;
+    S.revIn.disconnect();S.conv.disconnect();S.revIn.connect(nc);nc.connect(S.revOut);S.conv=nc;
+    const nd=c.createDelay(3);nd.delayTime.value=S.delay.delayTime.value;
+    S.dlyIn.disconnect();S.delay.disconnect();S.fb.disconnect();
+    S.dlyIn.connect(nd);nd.connect(S.dlp);S.fb.connect(nd);S.delay=nd;
+    for(const b in S.bus){const B=S.bus[b];if(B.fx&&(B.fxType==='pingpong'||B.fxType==='gated')){const ty=B.fxType;B.fxType=null;applyBusFx(b,ty,P.mix[b].fa==null?0.5:P.mix[b].fa);}}
+  }catch(e){}
+}
+function ctxSleep(now){
+  const c=S.ctx;if(!c||c.state!=='running'||ctxBusy()||S.sleepT)return;
+  const t=c.currentTime,g=S.endG.gain;
+  g.cancelScheduledValues(t);g.setValueAtTime(g.value,t);g.linearRampToValueAtTime(0,t+(now?0.05:0.3));
+  S.sleepT=setTimeout(()=>{
+    S.sleepT=null;
+    if(ctxBusy()||(!now&&performance.now()-(S.ctxTouch||0)<tailMs())){ctxWake();return;}
+    flushTails();
+    S.idleSusp=true;c.suspend().catch(()=>{S.idleSusp=false;});
+  },now?80:360);
 }
 function setupIdle(){
-  setInterval(()=>{if(ctxBusy())S.ctxTouch=performance.now();else if(performance.now()-(S.ctxTouch||0)>6000)ctxSleep();},2000);
-  const wake=()=>{if(S.ctx&&S.ctx.state==='suspended'&&S.idleSusp){S.idleSusp=false;S.ctxTouch=performance.now();S.ctx.resume();}};
+  setInterval(()=>{
+    if(!S.ctx||S.ctx.state!=='running')return;
+    if(ctxBusy())S.ctxTouch=performance.now();
+    else if(performance.now()-(S.ctxTouch||0)>tailMs())ctxSleep();
+  },250);
+  const wake=()=>{if(S.ctx&&(S.ctx.state==='suspended'||S.sleepT||(S.endG&&S.endG.gain.value<1)))ctxWake();};
   document.addEventListener('pointerdown',wake,true);document.addEventListener('keydown',wake,true);
   document.addEventListener('visibilitychange',()=>{
     if(document.hidden){
       if(S.srec)S.srec.stop();
-      // naar de achtergrond terwijl er niets speelt: microfoon los en alles stil
-      if(!S.playing&&!S.rec&&!S.vrec&&!S.hum){if(S.stream)stopMic();ctxSleep();}
-    }else wake();
+      // naar de achtergrond terwijl er niets speelt: microfoon los en meteen stil
+      if(!S.playing&&!S.rec&&!S.vrec&&!S.hum){if(S.stream)stopMic();ctxSleep(true);}
+    }
   });
 }
 function tick(ts){
