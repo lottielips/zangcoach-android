@@ -27,7 +27,11 @@ jobs:
         env:
           KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
         run: |
-          if [ -z "$KEYSTORE_B64" ]; then echo "::error::Geheim KEYSTORE_B64 ontbreekt"; exit 1; fi
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::warning::Geheim KEYSTORE_B64 ontbreekt: alleen een testbouw (niet ondertekend, niet installeerbaar)"
+            echo "HAS_KEY=false" >> "$GITHUB_ENV"; exit 0
+          fi
+          echo "HAS_KEY=true" >> "$GITHUB_ENV"
           echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/zangcoach.p12"
           echo "KEYSTORE_FILE=$RUNNER_TEMP/zangcoach.p12" >> "$GITHUB_ENV"
 
@@ -39,6 +43,7 @@ jobs:
         run: gradle assembleRelease --no-daemon --stacktrace
 
       - name: Controleren dat het dezelfde sleutel is als de oude app
+        if: env.HAS_KEY == 'true'
         run: |
           BT=$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)
           APK=app/build/outputs/apk/release/app-release.apk
@@ -48,11 +53,13 @@ jobs:
           cp "$APK" "zangcoach-${{ github.run_number }}.apk"
 
       - uses: actions/upload-artifact@v4
+        if: env.HAS_KEY == 'true'
         with:
           name: zangcoach-apk
           path: zangcoach-*.apk
 
       - name: Klaarzetten om te downloaden (Releases)
+        if: env.HAS_KEY == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
