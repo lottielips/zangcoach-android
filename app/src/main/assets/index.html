@@ -267,6 +267,9 @@ input[type=range]{width:100%;accent-color:var(--amber)}
 .vwave p{position:absolute;inset:0;display:grid;place-items:center;margin:0;font-size:13px;color:var(--muted);text-align:center;padding:0 12px}
 .vinfo b{color:var(--ink)}
 #lyrText{width:100%;box-sizing:border-box;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px;font:inherit;color:inherit;resize:vertical}
+.seqgraph{position:relative;height:150px;margin-top:12px;border-radius:10px;background:var(--panel2);border:1px solid var(--line);overflow:hidden}
+.seqgraph canvas{position:absolute;inset:0;width:100%;height:100%}
+.seqgraph p{position:absolute;inset:0;display:grid;place-items:center;margin:0;font-size:13px;color:var(--muted);text-align:center;padding:0 14px}
 .songstrip{display:flex;flex-wrap:wrap;gap:6px;min-height:34px;align-items:center}
 .songstrip button{border:1px solid var(--pc);background:color-mix(in srgb,var(--pc) 22%,var(--panel2));border-radius:8px;padding:6px 10px;font:600 13px inherit;color:inherit}
 .songstrip button.cur{outline:2px solid var(--good);outline-offset:1px}
@@ -703,6 +706,19 @@ input[type=range]{width:100%;accent-color:var(--amber)}
       </div>
       <p class="hint">Draai aan het filter terwijl de muziek speelt: dat geeft het typische "onder water"-effect.</p>
       <p class="hint"><b>Luidheid</b> maakt je hele nummer luider zonder dat het kraakt: een begrenzer drukt de pieken plat, zoals bij mastering. Rond 60-70% zit je op het niveau van Spotify. Helemaal open klinkt het platter en agressiever.</p>
+    </section>
+    <section class="card" id="aeqCard">
+      <div class="row" style="margin-bottom:8px"><h2 class="label" style="margin:0">Slimme EQ (hele nummer)</h2><span class="spacer"></span><span id="aeqState" class="muted" style="font-size:12px"></span></div>
+      <div class="f"><span>Doelklank</span><select id="aeqSel" aria-label="Doelklank"></select><small id="aeqDesc" class="muted"></small></div>
+      <div class="row" style="margin-top:10px">
+        <button id="aeqGo" class="btn primary" type="button">🎧 Luister en stem af</button>
+        <button id="aeqOff" class="btn sm" type="button">Uit</button>
+      </div>
+      <div class="seqgraph"><canvas id="aeqCanvas"></canvas><p id="aeqEmpty">Nog niet afgestemd. Kies een doelklank en tik op "Luister en stem af" terwijl je drukste deel speelt (bv. het refrein).</p></div>
+      <div class="legend"><span><i style="background:var(--muted)"></i>jouw mix</span><span><i style="background:var(--amber)"></i>doelklank</span><span><i style="background:var(--good)"></i>wat de EQ doet</span><span><i style="background:var(--ink)"></i>jouw mix na de EQ (stippels)</span></div>
+      <div class="f" style="margin-top:10px"><span>Hoe sterk: <b id="aeqAmtVal" class="mono">80%</b></span><input type="range" id="aeqAmt" min="0" max="100" step="5" value="80"></div>
+      <p id="aeqInfo" class="hint"></p>
+      <p class="hint">De app luistert 6 seconden naar je mix en meet hoeveel energie er in 29 frequentiebanden zit (van de diepste sub tot de lucht bovenaan). Dat vergelijkt hij met de doelklank: de gemiddelde verdeling van goed gemixte muziek, met de kleur van de stijl die je kiest. Een EQ van 10 banden haalt het verschil dan zo goed mogelijk weg. Wat er niet is, pompt hij niet op, en de luidheid blijft gelijk. Je eigen schuiven hieronder werken er nog bovenop.</p>
     </section>
     <section class="card">
       <div class="row" style="margin-bottom:10px"><h2 class="label" style="margin:0">Equalizer (hele nummer)</h2><span class="spacer"></span>
@@ -1699,6 +1715,7 @@ function applyMix(){
   S.fb.gain.setTargetAtTime(M.fb/100,t,0.02);
   S.delay.delayTime.setTargetAtTime(Math.min(2.9,M.dly*60/P.bpm/4),t,0.05);
   if(S.meq){const e=meqVals();S.meq.forEach((b,i)=>b.gain.setTargetAtTime(e[i],t,0.03));}
+  if(S.aeq){const A=P.master.aeq,on=A&&Array.isArray(A.g)&&A.g.length===S.aeq.length,k=on?(A.amt==null?0.8:A.amt):0;S.aeq.forEach((b,i)=>b.gain.setTargetAtTime(on?A.g[i]*k:0,t,0.05));}
   const room=M.room||'zaal';if(S.conv&&S.lastRoom!==room){S.conv.buffer=makeImpulse(S.ctx,room);S.lastRoom=room;}
   for(const b in S.bus){const m=P.mix[b];S.bus[b].rack.set(m,t);applyBusFx(b,m.fx||'geen',m.fa==null?0.5:m.fa);if(S.bus[b].pan)S.bus[b].pan.pan.setTargetAtTime(m.p||0,t,0.03);}
 }
@@ -2979,11 +2996,11 @@ fixProject.partFix=(d,o)=>{
 };
 function snapPart(){syncMel(P.mel);const d={};for(const k of PART_KEYS)d[k]=clone(P[k]);return d;}
 function loadPart(d){
-  const vol=P.master?P.master.v:0.8,loud=P.master&&P.master.loud!=null?P.master.loud:40,meqk=P.master&&P.master.eq?P.master.eq.slice():null;
+  const vol=P.master?P.master.v:0.8,loud=P.master&&P.master.loud!=null?P.master.loud:40,meqk=P.master&&P.master.eq?P.master.eq.slice():null,aeqk=P.master&&P.master.aeq?clone(P.master.aeq):null;
   if(d.vocs===undefined)fixVocs(d);
   for(const k of PART_KEYS)if(d[k]!==undefined)P[k]=clone(d[k]);
   P.master.v=vol; // het totaalvolume geldt voor het hele nummer
-  P.master.loud=loud;if(meqk)P.master.eq=meqk;
+  P.master.loud=loud;if(meqk)P.master.eq=meqk;if(aeqk)P.master.aeq=aeqk;else delete P.master.aeq;
   if(!P.mix.V)P.mix.V=clone(defaultProject().mix.V);
   fixVocs(P);fixMel(P.mel);
 }
@@ -3507,11 +3524,15 @@ function renderDrumMix(){
 /* ---------- master-EQ ---------- */
 const MEQ=[['lowshelf',60,'Sub 60 Hz'],['peaking',250,'Laag 250 Hz'],['peaking',1000,'Midden 1 kHz'],['peaking',4000,'Hoog 4 kHz'],['highshelf',12000,'Lucht 12 kHz']];
 const MEQ_PRESETS={vlak:['Vlak',[0,0,0,0,0]],bas:['Meer bas',[5,2,0,0,0]],helder:['Helder',[0,-1,0,3,4]],warm:['Warm',[2,2,0,-2,-3]],
-  smile:['Luid en vol (smile)',[4,1,-2,2,4]],radio:['Oude radio',[-12,-4,4,0,-12]],modder:['Minder modder',[0,-4,0,1,1]]};
+  smile:['Luid en vol (smile)',[4,1,-2,2,4]],radio:['Oude radio',[-12,-4,4,0,-12]],modder:['Minder modder',[0,-4,0,1,1]],
+  stem:['Stem naar voren',[-1,-2,2,3,0]],donker:['Donker en warm',[1,2,0,-3,-6]],sub:['Diepe sub',[6,0,-1,0,0]],gsm:['Voor de gsm-speaker',[-6,-1,1,2,1]],
+  dun:['Dun (oude cassette)',[-6,-2,2,-1,-5]],lucht:['Open en luchtig',[0,-1,0,1,5]],punch:['Punch (drums vooraan)',[3,-2,0,2,1]]};
 function buildMasterEQ(c){
   S.meq=MEQ.map(([ty,f])=>{const b=c.createBiquadFilter();b.type=ty;b.frequency.value=f;if(ty==='peaking')b.Q.value=0.9;return b;});
   for(let i=0;i<S.meq.length-1;i++)S.meq[i].connect(S.meq[i+1]);
-  return {inp:S.meq[0],out:S.meq[S.meq.length-1]};
+  // slimme EQ: 10 banden achter de eigen schuiven (zie seqAnalyse)
+  S.aeq=makeAeq(c);S.meq[S.meq.length-1].connect(S.aeq[0]);
+  return {inp:S.meq[0],out:S.aeq[S.aeq.length-1]};
 }
 function meqVals(){const e=P.master.eq;return Array.isArray(e)&&e.length===5?e:[0,0,0,0,0];}
 function renderMasterEQ(){
@@ -5393,6 +5414,155 @@ function setupSong(){
   renderSong();
 }
 
+
+/* ---------- slimme EQ ---------- */
+// Meet het spectrum van de mix in tertsbanden, vergelijkt met een doelklank en stelt een EQ van 10 banden zo in
+// dat het verschil zo klein mogelijk wordt.
+const TOB=[25,31.5,40,50,63,80,100,125,160,200,250,315,400,500,630,800,1000,1250,1600,2000,2500,3150,4000,5000,6300,8000,10000,12500,16000];
+const AEQ=[['lowshelf',45,0.7],['peaking',90,1.4],['peaking',180,1.4],['peaking',355,1.4],['peaking',710,1.4],['peaking',1400,1.4],['peaking',2800,1.4],['peaking',5600,1.4],['peaking',9000,1.4],['highshelf',13000,0.7]];
+function makeAeq(c){const a=AEQ.map(([ty,f,q])=>{const b=c.createBiquadFilter();b.type=ty;b.frequency.value=f;if(ty==='peaking')b.Q.value=q;b.gain.value=0;return b;});for(let i=0;i<a.length-1;i++)a[i].connect(a[i+1]);return a;}
+// vormpjes in dB
+const lo=(f,fc,g)=>g/(1+Math.pow(f/fc,2)),hi=(f,fc,g)=>g/(1+Math.pow(fc/f,2)),bell=(f,fc,w,g)=>{const x=Math.log2(f/fc)/w;return g*Math.exp(-x*x*1.4);};
+// De gemiddelde verdeling van goed gemixte popmuziek in tertsbanden: een bult rond 40-100 Hz,
+// daarna ongeveer 3,5 dB per octaaf zachter tot 4 kHz en 5 dB per octaaf daarboven.
+function refCurve(f){if(f<40)return -6*Math.log2(40/f);if(f<=100)return 0;if(f<=4000)return -3.5*Math.log2(f/100);return -3.5*Math.log2(40)-5*Math.log2(f/4000);}
+const SEQ_T={
+  neutraal:{n:'Gebalanceerd (streaming)',d:'Zoals een goed gemixt nummer op Spotify: alles in evenwicht.',f:()=>0},
+  kida:{n:'Kid A: warm en donker',d:'Warm onderaan, zachte hoogte, een beetje wazig. Ruimte voor galm en synths.',f:f=>lo(f,45,-1)+bell(f,200,1,1.5)+bell(f,3000,1,-1.5)+hi(f,6000,-3)},
+  aphex:{n:'Aphex Twin: strak en scherp',d:'Strakke diepe sub, weinig modder, scherpe heldere hoogte voor glitchy drums.',f:f=>lo(f,45,2)+bell(f,300,1,-2.5)+hi(f,7000,3)},
+  strokes:{n:'Garagerock (The Strokes)',d:'Midden naar voren (gitaren en stem), dun onderaan, niet te glad bovenaan.',f:f=>lo(f,90,-4)+bell(f,1500,1.4,3)+hi(f,9000,-2)},
+  kendrick:{n:'Hiphop (Kendrick Lamar)',d:'Dikke sub en kick, opgeruimd laag-midden, een stem die doorkomt, wat lucht.',f:f=>lo(f,60,4)+bell(f,250,1,-2)+bell(f,3000,1.2,1.5)+hi(f,10000,1.5)},
+  neosoul:{n:'Neo-soul: rond en warm',d:'Ronde bas, warm midden, zachte hoogte. Mooi met Rhodes en jazz-akkoorden.',f:f=>lo(f,100,2)+bell(f,400,1.2,1)+hi(f,5000,-2)},
+  lofi:{n:'Lo-fi: stoffig',d:'Minder sub en minder hoogte, een bult in het midden, zoals een oude cassette.',f:f=>lo(f,80,-6)+bell(f,1000,1.5,2)+hi(f,4000,-7)},
+  techno:{n:'Diepe techno',d:'Veel sub, holle laag-midden, net genoeg hoogte voor de hihats.',f:f=>lo(f,55,5)+bell(f,500,1,-3)+hi(f,8000,1)},
+  akoestisch:{n:'Akoestisch: open en natuurlijk',d:'Nauwelijks gekleurd, iets minder boem, wat meer lucht.',f:f=>lo(f,80,-1)+bell(f,250,1,-1)+hi(f,10000,2)},
+  gsm:{n:'Voor de gsm-speaker',d:'Een gsm-speaker kan geen diepe bas: die energie gaat naar het midden, zodat alles hoorbaar blijft.',f:f=>lo(f,150,-6)+bell(f,2500,1.2,2)+hi(f,8000,1)}
+};
+function seqTarget(key,f){const T=SEQ_T[key]||SEQ_T.neutraal;return refCurve(f)+T.f(f);}
+function bandName(f){return f<60?'sub':f<200?'bas':f<500?'laag-midden (modder)':f<2000?'midden':f<5000?'aanwezigheid':f<10000?'helderheid':'lucht';}
+function fmtF(f){return f>=1000?(Math.round(f/100)/10).toString().replace('.',',')+' kHz':Math.round(f)+' Hz';}
+// gemiddeld spectrum (vermogen per tertsband) uit een reeks FFT-metingen
+function bandsFromFft(sum,n,sr,size){
+  const bw=sr/size,out=[];
+  for(const fc of TOB){const a=fc*Math.pow(2,-1/6),b=fc*Math.pow(2,1/6);let p=0;
+    for(let k=Math.max(1,Math.floor(a/bw));k<=Math.ceil(b/bw)&&k<sum.length;k++){const f=k*bw;if(f>=a&&f<b)p+=sum[k]/n;}
+    out.push(10*Math.log10(p+1e-20));}
+  return out;
+}
+// Wat er moet veranderen: doel min gemeten, op gelijke luidheid gezet, afgevlakt en begrensd.
+function seqWanted(meas,key){
+  const tg=TOB.map(f=>seqTarget(key,f));
+  let d=TOB.map((f,i)=>tg[i]-meas[i]);
+  const mid=TOB.map((f,i)=>f>=150&&f<=6000?i:-1).filter(i=>i>=0),avg=mid.reduce((a,i)=>a+d[i],0)/mid.length;
+  d=d.map(v=>v-avg);
+  const top=Math.max(...meas);
+  d=d.map((v,i)=>meas[i]<top-50?Math.min(v,2):v); // (bijna) lege banden niet oppompen
+  for(let r=0;r<2;r++)d=d.map((v,i)=>(d[Math.max(0,i-1)]+2*v+d[Math.min(d.length-1,i+1)])/4);
+  // zoals een mastering-technicus: vooral wegnemen, voorzichtig toevoegen; diepe sub nauwelijks opdrijven (kost headroom)
+  return d.map((v,i)=>{const f=TOB[i],up=f<60?3:4,dn=f<200?8:6;return Math.max(-dn,Math.min(up,v));});
+}
+// De 10 banden zo instellen dat hun samen-respons zo dicht mogelijk bij het gewenste ligt (stap voor stap bijsturen).
+function seqFit(want){
+  ensureCtx();
+  const c=S.ctx,fl=makeAeq(c),fr=new Float32Array(TOB),mag=new Float32Array(TOB.length),ph=new Float32Array(TOB.length);
+  const at=(f)=>{let i=0;while(i<TOB.length-2&&TOB[i+1]<f)i++;const a=Math.log2(f/TOB[i])/Math.log2(TOB[i+1]/TOB[i]);return want[i]+(want[i+1]-want[i])*Math.max(0,Math.min(1,a));};
+  const near=AEQ.map(([ty,f])=>ty==='lowshelf'?at(35):ty==='highshelf'?at(14000):at(f));
+  const g=near.slice();
+  const resp=()=>{const tot=new Float32Array(TOB.length);fl.forEach((b,k)=>{b.gain.value=g[k];b.getFrequencyResponse(fr,mag,ph);for(let i=0;i<TOB.length;i++)tot[i]+=20*Math.log10(mag[i]+1e-9);});return tot;};
+  for(let it=0;it<24;it++){
+    const r=resp(),err=TOB.map((f,i)=>want[i]-r[i]);
+    const eAt=f=>{let i=0;while(i<TOB.length-2&&TOB[i+1]<f)i++;const a=Math.log2(f/TOB[i])/Math.log2(TOB[i+1]/TOB[i]);return err[i]+(err[i+1]-err[i])*Math.max(0,Math.min(1,a));};
+    AEQ.forEach(([ty,f],k)=>{const e=ty==='lowshelf'?eAt(35):ty==='highshelf'?eAt(14000):eAt(f);g[k]=Math.max(-8,Math.min(ty==='lowshelf'?3:5,g[k]+0.55*e));});
+  }
+  const r=resp();
+  return {g:g.map(v=>Math.round(v*10)/10),resp:Array.from(r)};
+}
+function seqResp(g,amt){
+  if(!S.ctx||!g)return null;
+  const fl=makeAeq(S.ctx),fr=new Float32Array(TOB),mag=new Float32Array(TOB.length),ph=new Float32Array(TOB.length),tot=new Array(TOB.length).fill(0);
+  fl.forEach((b,k)=>{b.gain.value=g[k]*amt;b.getFrequencyResponse(fr,mag,ph);for(let i=0;i<TOB.length;i++)tot[i]+=20*Math.log10(mag[i]+1e-9);});
+  return tot;
+}
+async function seqMeasure(ms){
+  ensureCtx();await S.ctx.resume();
+  const a=S.ctx.createAnalyser();a.fftSize=16384;a.smoothingTimeConstant=0;S.master.connect(a);
+  const fd=new Float32Array(a.frequencyBinCount),sum=new Float64Array(a.frequencyBinCount);let n=0,loud=0;
+  const t0=performance.now(),btn=$('aeqGo');
+  while(performance.now()-t0<ms){
+    await new Promise(r=>setTimeout(r,90));
+    btn.textContent='Even luisteren… '+Math.ceil((ms-(performance.now()-t0))/1000)+' s';
+    a.getFloatFrequencyData(fd);let e=0;
+    for(let k=0;k<fd.length;k++){const p=Math.pow(10,fd[k]/10);sum[k]+=p;e+=p;}
+    n++;if(e>1e-9)loud++;
+  }
+  try{S.master.disconnect(a);}catch(e){}
+  return loud<n*0.3?null:bandsFromFft(sum,n,S.ctx.sampleRate,a.fftSize);
+}
+async function seqAnalyse(){
+  const key=$('aeqSel').value,btn=$('aeqGo');btn.disabled=true;
+  const wasPlaying=S.playing;if(!S.playing)play();
+  let meas=null;try{meas=await seqMeasure(6000);}catch(e){}
+  if(!wasPlaying)stop();
+  btn.disabled=false;btn.textContent='🎧 Luister en stem af';
+  if(!meas){msg('Ik hoorde (bijna) niets. Zet eerst drums, bas of akkoorden in dit deel en probeer opnieuw.',true);return;}
+  const want=seqWanted(meas,key),fit=seqFit(want);
+  const old=P.master.aeq;
+  P.master.aeq={t:key,g:fit.g,amt:old&&old.amt!=null?old.amt:0.8,meas:meas.map(v=>Math.round(v*10)/10),at:Date.now()};
+  // de eigen schuiven terug op 0, anders tellen ze dubbel
+  const hadManual=meqVals().some(v=>v!==0);P.master.eq=[0,0,0,0,0];$('meqPre').value='';
+  save();applyMix();renderMasterEQ();renderSeq();
+  msg('Afgestemd op "'+SEQ_T[key].n+'".'+(hadManual?' Je eigen EQ-schuiven staan terug op 0, zodat ze niet dubbel tellen.':'')+' Vergelijk gerust met "Uit".');
+}
+function seqSummary(A){
+  const g=A.g,amt=A.amt==null?0.8:A.amt,items=AEQ.map(([ty,f],k)=>({f:ty==='lowshelf'?45:ty==='highshelf'?13000:f,v:g[k]*amt})).filter(x=>Math.abs(x.v)>=1.5);
+  items.sort((a,b)=>Math.abs(b.v)-Math.abs(a.v));
+  if(!items.length)return 'Je mix zat al dicht bij de doelklank: de EQ doet bijna niets.';
+  return 'Wat de EQ doet: '+items.slice(0,4).map(x=>(x.v>0?'+':'−')+Math.abs(x.v).toFixed(1).replace('.',',')+' dB rond '+fmtF(x.f)+' ('+bandName(x.f)+')').join(', ')+'.';
+}
+function drawSeq(){
+  const cv=$('aeqCanvas');if(!cv||S.tab!=='mix')return;
+  const A=P.master.aeq,box=cv.parentElement,dpr=window.devicePixelRatio||1,W=Math.max(1,box.clientWidth),H=box.clientHeight||150;
+  cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr);
+  const g=cv.getContext('2d');g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,W,H);
+  $('aeqEmpty').hidden=!!(A&&A.meas);if(!A||!A.meas)return;
+  const css=getComputedStyle(document.documentElement),col=n=>css.getPropertyValue(n).trim();
+  const mid=TOB.map((f,i)=>f>=150&&f<=6000?i:-1).filter(i=>i>=0);
+  const norm=a=>{const m=mid.reduce((s,i)=>s+a[i],0)/mid.length;return a.map(v=>v-m);};
+  const mN=norm(A.meas),tN=norm(TOB.map(f=>seqTarget(A.t,f))),rN=seqResp(A.g,A.amt==null?0.8:A.amt);
+  // schaal past zich aan: alles blijft in beeld
+  const mx=Math.max(...mN.map(Math.abs),...tN.map(Math.abs),...(rN||[0]).map(Math.abs)),R=Math.max(12,Math.min(36,Math.ceil(mx/6)*6));
+  const X=f=>Math.log(f/20)/Math.log(20000/20)*W,Y=db=>H/2-db/R*(H/2-8);
+  g.strokeStyle=col('--line');g.lineWidth=1;g.font='10px '+(css.getPropertyValue('--f-mono').trim()||'monospace');g.fillStyle=col('--muted');
+  for(const f of [50,100,200,500,1000,2000,5000,10000]){const x=Math.round(X(f))+0.5;g.beginPath();g.moveTo(x,0);g.lineTo(x,H);g.stroke();g.fillText(f>=1000?f/1000+'k':String(f),x+2,H-3);}
+  g.beginPath();g.moveTo(0,Math.round(Y(0))+0.5);g.lineTo(W,Math.round(Y(0))+0.5);g.stroke();
+  g.fillText('+'+R+' dB',3,11);g.fillText('−'+R,3,H-14);
+  const line=(arr,c,w,dash)=>{g.strokeStyle=c;g.lineWidth=w;g.setLineDash(dash||[]);g.beginPath();arr.forEach((v,i)=>{const x=X(TOB[i]),y=Y(Math.max(-R,Math.min(R,v)));i?g.lineTo(x,y):g.moveTo(x,y);});g.stroke();g.setLineDash([]);};
+  line(mN,col('--muted'),1.5);
+  line(tN,col('--amber'),2,[5,4]);
+  if(rN){line(rN,col('--good'),2.5);line(norm(mN.map((v,i)=>v+rN[i])),col('--ink'),1.5,[2,3]);}
+}
+function renderSeq(){
+  const sel=$('aeqSel');if(!sel)return;
+  const A=P.master.aeq;
+  if(A&&A.t&&sel.value!==A.t&&document.activeElement!==sel)sel.value=A.t;
+  $('aeqDesc').textContent=(SEQ_T[sel.value]||SEQ_T.neutraal).d;
+  const amt=A&&A.amt!=null?A.amt:0.8;$('aeqAmt').value=Math.round(amt*100);$('aeqAmtVal').textContent=Math.round(amt*100)+'%';
+  $('aeqAmt').disabled=!A;$('aeqOff').disabled=!A;
+  $('aeqState').textContent=A?'aan: '+(SEQ_T[A.t]||SEQ_T.neutraal).n:'uit';
+  $('aeqInfo').textContent=A?seqSummary(A)+(A.t!==sel.value?' (Je koos intussen een andere doelklank: tik op "Luister en stem af" om die toe te passen.)':''):'';
+  requestAnimationFrame(drawSeq);
+}
+function setupSeq(){
+  const sel=$('aeqSel');for(const k in SEQ_T){const o=document.createElement('option');o.value=k;o.textContent=SEQ_T[k].n;sel.appendChild(o);}
+  sel.value=(P.master.aeq&&P.master.aeq.t)||'neutraal';
+  sel.onchange=renderSeq;
+  $('aeqGo').onclick=seqAnalyse;
+  $('aeqOff').onclick=()=>{delete P.master.aeq;save();applyMix();renderSeq();msg('Slimme EQ staat uit.');};
+  $('aeqAmt').oninput=e=>{const A=P.master.aeq;if(!A)return;A.amt=+e.target.value/100;$('aeqAmtVal').textContent=e.target.value+'%';save();applyMix();$('aeqInfo').textContent=seqSummary(A);requestAnimationFrame(drawSeq);};
+  window.addEventListener('resize',()=>requestAnimationFrame(drawSeq));
+  renderSeq();
+}
+
 function tick(ts){
   requestAnimationFrame(tick);
   if(S.playing&&S.ctx){
@@ -5430,6 +5600,7 @@ function renderAll(){
   syncKitSel();preloadKit();preloadInst();
   renderScenes();renderProgs();refreshChords();renderSteps();renderDrumGrid();renderPads();renderDrumMix();renderRack($('drumRack'),'drums');renderMasterEQ();renderMel();renderParts();renderMixer();renderKey();
   refreshVoc(true);renderVoc();
+  if(typeof renderSeq==='function')renderSeq();
   if(typeof renderFlow==='function'){renderFlow();const lt=$('lyrText');if(lt&&document.activeElement!==lt)lt.value=P.lyrics||'';}
 }
 function showTab(t){
@@ -5437,7 +5608,7 @@ function showTab(t){
   document.querySelectorAll('.tab').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.tab===t)));
   document.querySelectorAll('.page').forEach(p=>p.hidden=p.id!=='page-'+t);
   if(t==='voc'){renderVoc();renderFlow();requestAnimationFrame(drawVoc);}
-  if(t==='mix'){renderMixer();renderMasterEQ();renderSong();}
+  if(t==='mix'){renderMixer();renderMasterEQ();renderSong();renderSeq();}
   if(t==='beat'){renderDrumMix();renderRack($('drumRack'),'drums');fillSmpFrom();requestAnimationFrame(drawSmp);}
   if(t==='mel'||t==='chords'){renderRack($('melRack'),S.track);renderRack($('chordRack'),'chords');}
 }
@@ -5548,7 +5719,7 @@ function init(){
   $('feel').oninput=e=>{P.mel[S.track].feel=+e.target.value;$('feelVal').textContent=e.target.value;save();};
   $('glideCb').onchange=e=>{P.mel[S.track].glide=e.target.checked;save();};
   $('humBtn').onclick=toggleHum;
-  setupVoc();setupVars();setupBackup();setupSampler();setupIdle();setupCells();setupText();setupSong();
+  setupVoc();setupVars();setupBackup();setupSampler();setupIdle();setupCells();setupText();setupSong();setupSeq();
   $('humNudge').oninput=e=>nudgeHum(+e.target.value);
   $('melRand').onclick=randomMel;
   $('melClear').onclick=()=>{pushUndo();P.mel[S.track].notes=[];save();renderMelGrid();msg((S.track==='A'?'Melodie':'Bas')+' gewist. ↶ zet hem terug.');};

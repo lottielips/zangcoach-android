@@ -29,6 +29,11 @@ eindpoort dicht, worden galm/echo vervangen door verse (`flushTails`) en wordt d
 (`startTimer`) en plant met het scherm uit 1,5 s vooruit; na een hapering slaat hij gemiste stappen over.
 
 ## Versies
+- **3.5** – Slimme EQ (Mix & opname): meet 6 s het spectrum in 29 tertsbanden (`seqMeasure`, vóór de EQ), vergelijkt met
+  een doelcurve (`refCurve` = gemiddelde van commerciële mixen + stijlkleur, 10 doelklanken in `SEQ_T`), berekent de
+  gewenste correctie (gelijke luidheid, lege banden niet oppompen, grenzen per gebied: `seqWanted`) en fit een EQ van
+  10 banden (`AEQ`, via getFrequencyResponse: `seqFit`). Geldt voor het hele nummer (`P.master.aeq`), sterkte instelbaar,
+  grafiek met mix/doel/EQ/resultaat. 7 extra vaste voorinstellingen.
 - **3.4** – Songmodus (Mix & opname): delen in een volgorde (`P.song`, `P.songLoop`), deel na deel afspelen met fill
   vóór een wissel (`songStep` in de planner), stopt vanzelf aan het einde (`S.songEnd`), en het hele nummer in één keer
   opnemen. Fout uit 3.3 opgelost: nieuw deel maken/wisselen liep vast bij oudere nummers (`clone(undefined)`; standaard
