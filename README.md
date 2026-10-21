@@ -20,6 +20,8 @@ anders kan de APK niet over de oude app geïnstalleerd worden.
 versionCode moet altijd hoger zijn dan de vorige (oude app eindigde op 17).
 
 ## Versies
+- **3.1.2** – Geen ruis bij het openen: samples laden zonder de geluidsmotor te starten (AudioBuffer pas bij afspelen, `smpBuf`);
+  stilleggen na 6 s zonder klank.
 - **3.1.1** – Geen ruis meer na de sampler: de microfoon gaat na een sampler-opname weer uit; de geluidsmotor
   gaat na 10 s zonder klank stil (`ctxSleep`, wakker bij de volgende tik); op de achtergrond zonder muziek: microfoon los en stil.
 - **3.1** – Sampler (tabblad Beat): eigen geluiden uit een bestand, de microfoon, een zangopname of een mix-opname;

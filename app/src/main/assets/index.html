@@ -4552,31 +4552,32 @@ async function smpInit(){
   renderSampler();renderDrumGrid();renderPads();if(S.pick)renderPick();
   if(S.ctx)preloadKit();
 }
-// Ruwe opname laden en klaarzetten als AudioBuffer (één keer per sessie).
+// Ruwe opname laden (één keer per sessie). Dit start de geluidsmotor NIET: een open geluidsstroom
+// kan ruisen. De AudioBuffer wordt pas gemaakt als er echt iets moet klinken (smpBuf).
 function smpEnsure(id){
   let e=S.smp.get(id);
   if(e)return e.p;
   e={};
   e.p=(async()=>{
-    ensureCtx();
     const meta=S.smeta.get(id),o=await SDB.getPcm(id);
     if(!meta||!o)throw new Error('Dit geluid is niet meer te vinden.');
-    const i16=new Int16Array(o.pcm),buf=S.ctx.createBuffer(1,i16.length,meta.sr),x=buf.getChannelData(0);
+    const i16=new Int16Array(o.pcm),x=new Float32Array(i16.length);
     for(let i=0;i<i16.length;i++)x[i]=i16[i]/32768;
-    e.buf=buf;e.x=x;e.meta=meta;return e;
+    e.x=x;e.sr=meta.sr;e.dur=x.length/meta.sr;e.meta=meta;return e;
   })();
   e.p.catch(()=>S.smp.delete(id));
   S.smp.set(id,e);return e.p;
 }
-function smpReady(id){const e=S.smp.get(id);return e&&e.buf?e:null;}
+function smpReady(id){const e=S.smp.get(id);return e&&e.x?e:null;}
+function smpBuf(e){if(!e.buf){ensureCtx();const b=S.ctx.createBuffer(1,e.x.length,e.sr);b.getChannelData(0).set(e.x);e.buf=b;}return e.buf;}
 
 // Waar de plakjes beginnen (in seconden, vooruit gelezen).
 function smpMarks(e){
   const m=S.smeta.get(e.meta.id)||e.meta,key=m.st+'|'+m.en+'|'+m.mode;
   if(e.mk&&e.mkKey===key)return e.mk;
-  const L=e.buf.duration,a=m.st*L,b=Math.max(a+0.02,m.en*L);
+  const L=e.dur,a=m.st*L,b=Math.max(a+0.02,m.en*L);
   let mk;
-  if(m.mode==='slag')mk=onsets(e.x,e.buf.sampleRate,a,b);
+  if(m.mode==='slag')mk=onsets(e.x,e.sr,a,b);
   else{const n=+m.mode||8;mk=[];for(let i=0;i<n;i++)mk.push(a+(b-a)*i/n);}
   e.mk=mk;e.mkKey=key;return mk;
 }
@@ -4599,13 +4600,13 @@ function onsets(x,sr,a,b){
   return mk.slice(0,16);
 }
 function smpCount(id){const e=smpReady(id);if(e)return smpMarks(e).length;const m=S.smeta.get(id);return m&&m.mode!=='slag'?+m.mode:16;}
-function smpRev(e){if(!e.rbuf)e.rbuf=reverseBuf(e.buf);return e.rbuf;}
+function smpRev(e){if(!e.rbuf)e.rbuf=reverseBuf(smpBuf(e));return e.rbuf;}
 // Plakje k: welke buffer, vanaf waar, hoe lang. Omgekeerd telt van achteren, zodat plakje 1 weer vooraan staat.
 function smpSlice(e,k){
   const mk=smpMarks(e),n=mk.length;if(!n)return null;
   k=((k%n)+n)%n;
-  const m=S.smeta.get(e.meta.id)||e.meta,L=e.buf.duration,b=Math.max(mk[n-1]+0.02,m.en*L);
-  if(!m.rev){const s=mk[k],en=k+1<n?mk[k+1]:b;return {buf:e.buf,off:s,dur:Math.max(0.01,en-s)};}
+  const m=S.smeta.get(e.meta.id)||e.meta,L=e.dur,b=Math.max(mk[n-1]+0.02,m.en*L);
+  if(!m.rev){const s=mk[k],en=k+1<n?mk[k+1]:b;return {buf:smpBuf(e),off:s,dur:Math.max(0.01,en-s)};}
   const j=n-1-k,s=mk[j],en=j+1<n?mk[j+1]:b;
   return {buf:smpRev(e),off:L-en,dur:Math.max(0.01,en-s)};
 }
@@ -4808,7 +4809,7 @@ function drawSmp(){
   const g=cv.getContext('2d');g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,W,H);
   $('smpEmpty').hidden=!!e;if(!e){$('smpEmpty').textContent=m?'Laden…':'';return;}
   const css=getComputedStyle(document.documentElement),col=n=>css.getPropertyValue(n).trim();
-  const x=e.x,per=x.length/W,mk=smpMarks(e),L=e.buf.duration,hl=S.shl&&S.shl.until>performance.now()?S.shl.k:-1;
+  const x=e.x,per=x.length/W,mk=smpMarks(e),L=e.dur,hl=S.shl&&S.shl.until>performance.now()?S.shl.k:-1;
   // plakjes om beurten iets donkerder, het gekozen plakje oplichten
   const n=mk.length,end=m.en*L;
   for(let k=0;k<n;k++){
@@ -4834,7 +4835,7 @@ function drawSmp(){
 }
 function smpTapWave(ev){
   const m=S.smeta.get(S.ssel),e=m&&smpReady(m.id);if(!e)return;
-  const r=$('smpWave').getBoundingClientRect(),t=(ev.clientX-r.left)/r.width*e.buf.duration,mk=smpMarks(e),n=mk.length;
+  const r=$('smpWave').getBoundingClientRect(),t=(ev.clientX-r.left)/r.width*e.dur,mk=smpMarks(e),n=mk.length;
   let k=0;for(let i=0;i<n;i++)if(mk[i]<=t)k=i;
   if(t<mk[0])k=0;
   smpAudition(m.id,m.rev?n-1-k:k);
@@ -4913,7 +4914,7 @@ function smpPickSection(box,row,ch){
 
 /* ---------- geluidsmotor stilleggen als er niets gebeurt ---------- */
 // Een open geluidsstroom kan op sommige toestellen en koptelefoons ruisen, ook als er niets klinkt,
-// en kost batterij. Na 10 seconden zonder klank (en zonder microfoon of opname) gaat hij stil;
+// en kost batterij. Na 6 seconden zonder klank (en zonder microfoon of opname) gaat hij stil;
 // de volgende tik of klank maakt hem meteen weer wakker.
 function ctxBusy(){return !!(S.playing||S.stream||S.rec||S.srec||S.drone||S.hum||S.vrec);}
 function ctxSleep(){
@@ -4921,7 +4922,7 @@ function ctxSleep(){
   S.idleSusp=true;c.suspend().catch(()=>{S.idleSusp=false;});
 }
 function setupIdle(){
-  setInterval(()=>{if(ctxBusy())S.ctxTouch=performance.now();else if(performance.now()-(S.ctxTouch||0)>10000)ctxSleep();},2000);
+  setInterval(()=>{if(ctxBusy())S.ctxTouch=performance.now();else if(performance.now()-(S.ctxTouch||0)>6000)ctxSleep();},2000);
   const wake=()=>{if(S.ctx&&S.ctx.state==='suspended'&&S.idleSusp){S.idleSusp=false;S.ctxTouch=performance.now();S.ctx.resume();}};
   document.addEventListener('pointerdown',wake,true);document.addEventListener('keydown',wake,true);
   document.addEventListener('visibilitychange',()=>{
