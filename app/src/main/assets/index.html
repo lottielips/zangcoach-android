@@ -270,6 +270,8 @@ input[type=range]{width:100%;accent-color:var(--amber)}
 .seqgraph{position:relative;height:150px;margin-top:12px;border-radius:10px;background:var(--panel2);border:1px solid var(--line);overflow:hidden}
 .seqgraph canvas{position:absolute;inset:0;width:100%;height:100%}
 .seqgraph p{position:absolute;inset:0;display:grid;place-items:center;margin:0;font-size:13px;color:var(--muted);text-align:center;padding:0 14px}
+.lbar{gap:10px}
+.lbar .chip.on{font-weight:700}
 .songstrip{display:flex;flex-wrap:wrap;gap:6px;min-height:34px;align-items:center}
 .songstrip button{border:1px solid var(--pc);background:color-mix(in srgb,var(--pc) 22%,var(--panel2));border-radius:8px;padding:6px 10px;font:600 13px inherit;color:inherit}
 .songstrip button.cur{outline:2px solid var(--good);outline-offset:1px}
@@ -403,6 +405,11 @@ input[type=range]{width:100%;accent-color:var(--amber)}
       <p class="hint">Een start zet drums, melodie, bas, akkoorden, tempo en effecten klaar in jouw toonsoort. Daarna pas je alles zelf aan.</p>
     </section>
 
+    <section class="card" id="beatLayerCard">
+      <div class="row lbar"><h2 class="label" style="margin:0">Beats</h2><div id="beatLayers" class="chips" style="margin:0"></div></div>
+      <p class="hint" style="margin:6px 0 0">Tot 3 beats die tegelijk spelen, bv. een 808-beat en een gehakte drumbreak. Elke beat heeft een eigen kit, patroon en spoor in de mixer. Wat je hieronder ziet, is de beat die je kiest.</p>
+    </section>
+
     <section class="card">
       <div class="row" style="margin-bottom:10px">
         <h2 class="label" style="margin:0">Drumpads</h2>
@@ -492,7 +499,7 @@ input[type=range]{width:100%;accent-color:var(--amber)}
       <p class="hint">Elke klank apart: harder of zachter (tot 200%), links of rechts, en hoeveel galm. Bijvoorbeeld: de snare met veel galm, de kick droog in het midden.</p>
     </section>
     <section class="card">
-      <h2 class="label">Klank van de drums</h2>
+      <h2 class="label" id="drumRackTitle">Klank van de drums</h2>
       <div id="drumRack" class="fields"></div>
       <p class="hint">Geldt voor alle drums samen. Compressie geeft punch. Vervorming en bitcrush maken het rauwer zonder dat het luider wordt. Nog een effect (filter op de maat, gated galm, phaser…) kies je bij Mix &amp; opname.</p>
     </section>
@@ -502,10 +509,9 @@ input[type=range]{width:100%;accent-color:var(--amber)}
   <div class="page" id="page-mel" hidden>
     <section class="card">
       <div class="row" style="margin-bottom:12px">
-        <div class="seg" role="group" aria-label="Spoor">
-          <button type="button" data-tr="A" aria-pressed="true">Melodie</button>
-          <button type="button" data-tr="B" aria-pressed="false">Bas</button>
-        </div>
+        <div class="seg" role="group" aria-label="Spoor" id="trackSeg"></div>
+        <button id="trackAdd" class="btn sm" type="button">＋ Melodie</button>
+        <button id="trackDel" class="btn sm" type="button" hidden>Verwijder spoor</button>
         <span class="spacer"></span>
         <button id="humBtn" class="btn sm rec" type="button">🎤 Neurie in</button>
       </div>
@@ -649,7 +655,8 @@ input[type=range]{width:100%;accent-color:var(--amber)}
   <!-- ============ AKKOORDEN ============ -->
   <div class="page" id="page-chords" hidden>
     <section class="card" aria-labelledby="h-chords">
-      <h2 class="label" id="h-chords">Akkoorden</h2>
+      <div class="row lbar"><h2 class="label" id="h-chords" style="margin:0">Akkoorden</h2><div id="chordLayers" class="chips" style="margin:0"></div></div>
+      <p class="hint" style="margin:6px 0 10px">Tot 3 akkoordlagen tegelijk, bv. een pad en een arpeggio. Ze volgen dezelfde akkoorden, elk met een eigen ritme, klank en mixerspoor.</p>
       <div id="progList" class="proglist"></div>
       <div id="chordRow" class="chordrow"></div>
       <div id="stepGrid" class="steps" aria-hidden="true"></div>
@@ -672,7 +679,7 @@ input[type=range]{width:100%;accent-color:var(--amber)}
       <p class="hint">Effecten, galm en links/rechts voor de akkoorden vind je bij Mix &amp; opname.</p>
     </section>
     <section class="card">
-      <h2 class="label">Klank van de akkoorden</h2>
+      <h2 class="label" id="chordRackTitle">Klank van de akkoorden</h2>
       <div id="chordRack" class="fields"></div>
       <p class="hint">Vervorming en bitcrush maken het ruwer zonder dat het luider wordt. Tape-wobble laat het zwalpen als een oude cassette of mellotron.</p>
     </section>
@@ -1358,7 +1365,7 @@ const INST={};INSTLIST.forEach(x=>INST[x.id]=x.n);
 const IGROUPS=['Akoestisch','Experimenteel','Synths','Toetsen','Gitaar','Blazers & stem','Bas'];
 const LIVEKEYS=['z','x','c','v','b','n','m',','];
 const MEL_SCALE={major:[0,2,4,5,7,9,11],minor:[0,2,3,5,7,8,10]};
-const ROWS={A:15,B:8};
+const ROWS={A:15,B:8,C:15,D:15};
 const DEG=['1','2','3','4','5','6','7'];
 
 // Patronen als tekst: x = hard, o = zacht, . = uit.
@@ -1501,7 +1508,7 @@ function defaultProject(){
     v:3,bpm:90,swing:0,ts:'4/4',bars:1,glitch:0,metro:false,
     drums:emptyDrums(),dmute:{},kit:{},dprob:{},drat:{},dtune:{},ddec:{},dvol:{},dpan:{},drev:{},dsl:{},dslc:{},dstn:{},dsln:{},drgl:{},dvar:{},fill:true,
     mel:{A:{notes:[],inst:'ondes',oct:4,len:2,follow:false,vars:[[]],seq:[0],ed:0},B:{notes:[],inst:'sub',oct:2,len:4,follow:true,vars:[[]],seq:[0],ed:0}},
-    prog:0,sev:false,ext:0,twin:false,rhythm:'pad',chordInst:'auto',chordFeel:40,change:'bar',
+    prog:0,sev:false,ext:0,twin:false,dlay:[],dcur:0,clay:[],ccur:0,rhythm:'pad',chordInst:'auto',chordFeel:40,change:'bar',
     mix:{drums:{v:.8,m:false,r:.1,d:0},chords:{v:.7,m:false,r:.3,d:0},A:{v:.8,m:false,r:.35,d:.2},B:{v:.8,m:false,r:0,d:0},V:{v:.9,m:false,r:.2,d:0}},
     vocs:[defaultTrack(1)],
     master:{v:.8,filter:100,lofi:0,dly:3,fb:35,vinyl:0},color:{A:'normaal',B:'normaal',chords:'normaal'},
@@ -1541,7 +1548,7 @@ function fixProject(p){
   if(!RHYTHMS.some(r=>r.id===o.rhythm))o.rhythm='pad';
   o.dmute=o.dmute||{};
   o.kit=o.kit||{};
-  o.dprob=o.dprob||{};o.drat=o.drat||{};o.dtune=o.dtune||{};o.ddec=o.ddec||{};o.dvol=o.dvol||{};o.dpan=o.dpan||{};o.drev=o.drev||{};o.dsl=o.dsl||{};o.dslc=o.dslc||{};o.dstn=o.dstn||{};o.dsln=o.dsln||{};o.drgl=o.drgl||{};o.dvar=o.dvar||{};if(o.ext==null)o.ext=o.sev?7:0;o.twin=!!o.twin;if(typeof o.lyrics!=='string')o.lyrics='';if(!Array.isArray(o.song))o.song=[];if(!Array.isArray(o.flow))o.flow=[];if(o.fill===undefined)o.fill=true;
+  o.dprob=o.dprob||{};o.drat=o.drat||{};o.dtune=o.dtune||{};o.ddec=o.ddec||{};o.dvol=o.dvol||{};o.dpan=o.dpan||{};o.drev=o.drev||{};o.dsl=o.dsl||{};o.dslc=o.dslc||{};o.dstn=o.dstn||{};o.dsln=o.dsln||{};o.drgl=o.drgl||{};o.dvar=o.dvar||{};if(o.ext==null)o.ext=o.sev?7:0;o.twin=!!o.twin;fixLayers(o);if(typeof o.lyrics!=='string')o.lyrics='';if(!Array.isArray(o.song))o.song=[];if(!Array.isArray(o.flow))o.flow=[];if(o.fill===undefined)o.fill=true;
   o.color=Object.assign({A:'normaal',B:'normaal',chords:'normaal'},o.color||{});
   // vanaf v3 staat er een snelle start vooraan: de gemarkeerde start één plek opschuiven
   if(p&&(p.v||2)<3&&o.scene>=0)o.scene++;
@@ -1664,26 +1671,10 @@ function ensureCtx(){
   const dlp=c.createBiquadFilter();dlp.type='lowpass';dlp.frequency.value=2600;S.dlp=dlp;
   S.dlyIn.connect(S.delay);S.delay.connect(dlp);dlp.connect(S.fb);S.fb.connect(S.delay);
   const dOut=c.createGain();dOut.gain.value=0.7;dlp.connect(dOut);dOut.connect(S.master);
-  // sporen
-  for(const b of ['drums','chords','A','B','V']){
-    const g=c.createGain(),r=c.createGain(),d=c.createGain();
-    g.connect(S.master);g.connect(r);g.connect(d);r.connect(S.revIn);d.connect(S.dlyIn);
-    const pre=c.createGain(),pan=c.createStereoPanner?c.createStereoPanner():null,rack=buildRack(c);
-    pre.connect(rack.inp);
-    if(pan){rack.out.connect(pan);pan.connect(g);}else rack.out.connect(g);
-    S.bus[b]={g,r,d,in:pre,pre,pan,rack,rk:rack.out,fx:null,fxType:'geen'};
-    if(b!=='drums'&&b!=='V'){
-      // klankkleur: hoog- en laagdoorlaat + zachte verzadiging, ingevoegd vóór het spoorvolume
-      const inn=c.createGain(),hp=c.createBiquadFilter(),lp=c.createBiquadFilter(),sh=c.createWaveShaper(),dry=c.createGain(),wet=c.createGain();
-      hp.type='highpass';lp.type='lowpass';hp.frequency.value=20;lp.frequency.value=20000;sh.oversample='2x';
-      inn.connect(hp);hp.connect(lp);lp.connect(dry);lp.connect(sh);sh.connect(wet);dry.connect(pre);wet.connect(pre);wet.gain.value=0;
-      Object.assign(S.bus[b],{in:inn,hp,lp,sh,dry,wet,col:''});
-    }
-  }
-  // echo-gooi: alle sporen extra naar de echo sturen zolang je de knop vasthoudt
+  // sporen (lagen krijgen pas een spoor als je ze maakt: ensureBus)
   S.throwIn=c.createGain();S.throwIn.gain.value=0;S.throwIn.connect(S.dlyIn);
-  for(const b in S.bus)S.bus[b].g.connect(S.throwIn);
-  // vinylkraak (DOOM-sfeer): krakjes + zacht geruis, in een lus
+  for(const b of new Set(['drums','chords','A','B','V'].concat(allBuses())))makeBus(c,b);
+    // vinylkraak (DOOM-sfeer): krakjes + zacht geruis, in een lus
   const vl=c.sampleRate*4,vb=c.createBuffer(1,vl,c.sampleRate),vd=vb.getChannelData(0);
   let lp=0;for(let i=0;i<vl;i++){lp=lp*0.97+(Math.random()*2-1)*0.03;vd[i]=lp*0.6;if(Math.random()<0.0004){const a=(Math.random()*0.8+0.2)*(Math.random()<.5?-1:1);for(let k=0;k<30&&i+k<vl;k++)vd[i+k]+=a*Math.exp(-k/5);}}
   const vs=c.createBufferSource();vs.buffer=vb;vs.loop=true;const vf=c.createBiquadFilter();vf.type='bandpass';vf.frequency.value=2500;vf.Q.value=0.4;
@@ -1692,12 +1683,34 @@ function ensureCtx(){
   applyMix();preloadKit();preloadInst();
   setInterval(autoLevelTick,100);
 }
+
+function makeBus(c,b){
+  if(S.bus[b])return;
+  const g=c.createGain(),r=c.createGain(),d=c.createGain();
+  g.connect(S.master);g.connect(r);g.connect(d);r.connect(S.revIn);d.connect(S.dlyIn);
+  const pre=c.createGain(),pan=c.createStereoPanner?c.createStereoPanner():null,rack=buildRack(c);
+  pre.connect(rack.inp);
+  if(pan){rack.out.connect(pan);pan.connect(g);}else rack.out.connect(g);
+  S.bus[b]={g,r,d,in:pre,pre,pan,rack,rk:rack.out,fx:null,fxType:'geen'};
+  if(!b.startsWith('drums')&&b!=='V'){
+    // klankkleur: hoog- en laagdoorlaat + zachte verzadiging, ingevoegd vóór het spoorvolume
+    const inn=c.createGain(),hp=c.createBiquadFilter(),lp=c.createBiquadFilter(),sh=c.createWaveShaper(),dry=c.createGain(),wet=c.createGain();
+    hp.type='highpass';lp.type='lowpass';hp.frequency.value=20;lp.frequency.value=20000;sh.oversample='2x';
+    inn.connect(hp);hp.connect(lp);lp.connect(dry);lp.connect(sh);sh.connect(wet);dry.connect(pre);wet.connect(pre);wet.gain.value=0;
+    Object.assign(S.bus[b],{in:inn,hp,lp,sh,dry,wet,col:''});
+  }
+  if(S.throwIn)g.connect(S.throwIn);
+}
+function ensureBus(b){if(!S.ctx||S.bus[b])return;makeBus(S.ctx,b);applyMix();}
 function applyMix(){
   if(!S.ctx) return;
+  for(const b of allBuses())if(!S.bus[b])makeBus(S.ctx,b);
   const t=S.ctx.currentTime,M=P.master;
+  const inUse=new Set(allBuses()),mixOf=b=>P.mix[b]||(inUse.has(b)?(P.mix[b]=mixDefault(b)):mixDefault(b));
   for(const b in S.bus){
-    const m=P.mix[b]||(P.mix[b]=clone(defaultProject().mix[b]));
-    S.bus[b].g.gain.setTargetAtTime(m.m?0:m.v,t,0.02);
+    const m=mixOf(b);
+    // een spoor van een laag die er (in dit deel) niet is, zwijgt
+    S.bus[b].g.gain.setTargetAtTime(m.m||!inUse.has(b)?0:m.v,t,0.02);
     S.bus[b].r.gain.setTargetAtTime(m.r,t,0.02);
     S.bus[b].d.gain.setTargetAtTime(m.d,t,0.02);
   }
@@ -1711,16 +1724,20 @@ function applyMix(){
   S.wet.gain.setTargetAtTime(lf>0?Math.min(1,lf*2):0,t,0.02);
   S.dry.gain.setTargetAtTime(1-Math.min(1,lf*2),t,0.02);
   S.vinylG.gain.setTargetAtTime(S.playing?(M.vinyl||0)/100*0.06:0,t,0.05); // alleen tijdens het afspelen
-  for(const b of ['chords','A','B'])setColor(b,(P.color&&P.color[b])||'normaal');
+  for(const b in S.bus)if(S.bus[b].hp)setColor(b,(P.color&&P.color[b])||'normaal');
   S.fb.gain.setTargetAtTime(M.fb/100,t,0.02);
   S.delay.delayTime.setTargetAtTime(Math.min(2.9,M.dly*60/P.bpm/4),t,0.05);
   if(S.meq){const e=meqVals();S.meq.forEach((b,i)=>b.gain.setTargetAtTime(e[i],t,0.03));}
   if(S.aeq){const A=P.master.aeq,on=A&&Array.isArray(A.g)&&A.g.length===S.aeq.length,k=on?(A.amt==null?0.8:A.amt):0;S.aeq.forEach((b,i)=>b.gain.setTargetAtTime(on?A.g[i]*k:0,t,0.05));}
   const room=M.room||'zaal';if(S.conv&&S.lastRoom!==room){S.conv.buffer=makeImpulse(S.ctx,room);S.lastRoom=room;}
-  for(const b in S.bus){const m=P.mix[b];S.bus[b].rack.set(m,t);applyBusFx(b,m.fx||'geen',m.fa==null?0.5:m.fa);if(S.bus[b].pan)S.bus[b].pan.pan.setTargetAtTime(m.p||0,t,0.03);}
+  for(const b in S.bus){const m=mixOf(b);S.bus[b].rack.set(m,t);applyBusFx(b,m.fx||'geen',m.fa==null?0.5:m.fa);if(S.bus[b].pan)S.bus[b].pan.pan.setTargetAtTime(m.p||0,t,0.03);}
 }
 // Waar gaat een geluid naartoe: tijdens afspelen via een 'poort' zodat Stop alles netjes kan uitfaden.
-function dest(b){return (S.playing&&S.gates&&S.gates[b])||S.bus[b].in;}
+function dest(b){
+  if(!S.bus[b])ensureBus(b);
+  if(S.playing&&S.gates){if(!S.gates[b]){const n=S.ctx.createGain();n.connect(S.bus[b].in);S.gates[b]=n;}return S.gates[b];}
+  return S.bus[b].in;
+}
 const COLORS={normaal:'Helder (normaal)',warm:'Warm',stoffig:'Stoffig (plaat)',telefoon:'Telefoon',onderwater:'Onder water'};
 function colorCurve(drive){const n=2048,cv=new Float32Array(n);for(let i=0;i<n;i++){const x=i/(n-1)*2-1;cv[i]=Math.tanh(x*drive)/Math.tanh(drive)*0.9;}return cv;}
 function setColor(b,col){
@@ -1789,7 +1806,7 @@ function loadInst(id){
   })).then(a=>{S.ibuf[id]=a;return a;}).catch(()=>{S.ibuf[id]=null;});
   return S.ibuf[id];
 }
-function preloadInst(){if(!S.ctx)return;[P.mel.A.inst,P.mel.B.inst,chordInstNow()].forEach(i=>i&&loadInst(i));}
+function preloadInst(){if(!S.ctx)return;const l=melTracks().map(t=>P.mel[t].inst);for(let i=0;i<nChord();i++)withChord(i,()=>l.push(chordInstNow()));l.forEach(i=>i&&loadInst(i));}
 // Hoe elk instrument zich gedraagt.
 // SUSTAIN: blijft klinken zolang de noot duurt (strijken, blazen): de opname wordt naadloos herhaald.
 // RING: hoe lang een noot na het loslaten nog natuurlijk uitklinkt (s).
@@ -1974,7 +1991,7 @@ function loadSample(tr,id){
   S.sbuf[k]=S.ctx.decodeAudioData(u.buffer).then(b=>{S.sbuf[k]=b;return b;}).catch(()=>{S.sbuf[k]=null;});
   return S.sbuf[k];
 }
-function preloadKit(){if(!S.ctx)return;DRUMS.forEach(d=>{const k=P.kit[d.id];if(isSmp(k)){if(S.smeta.has(k.slice(2)))smpEnsure(k.slice(2)).catch(()=>{});}else loadSample(d.id,k);});}
+function preloadKit(){if(!S.ctx)return;for(let i=0;i<nBeat();i++)withBeat(i,()=>DRUMS.forEach(d=>{const k=P.kit[d.id];if(isSmp(k)){if(S.smeta.has(k.slice(2)))smpEnsure(k.slice(2)).catch(()=>{});}else loadSample(d.id,k);}));}
 function drum(id,t,vel,out,sl,hm){
   // volume, links/rechts en galm per drumklank
   const dv=P.dvol&&P.dvol[id]!=null?P.dvol[id]:1,dp=(P.dpan&&P.dpan[id])||0,dr=(P.drev&&P.drev[id])||0;
@@ -2099,14 +2116,15 @@ function playStep(abs,t0,sd,spb){
   const n=S.chords.length,cl=chordLen();
   if(n){
     const idx=Math.floor(step/cl)%n,cpos=step%cl,ch=S.chords[idx];
-    if(cpos===0){S.vq.push({t:t0,idx});S.arpN=0;}
-    if(!P.mix.chords.m)playChordStep(curRhythm(),ch,step,cpos,cl,t,sd,bpos,dest('chords'));
+    if(cpos===0){S.vq.push({t:t0,idx});S.arpN=0;S.arpNs={};}
+    for(let li=0;li<nChord();li++)withChord(li,()=>{const b=chordBus(li);if(!(P.mix[b]&&P.mix[b].m))playChordStep(curRhythm(),ch,step,cpos,cl,t,sd,bpos,dest(b));});
   }
   S.sq.push({t,pos,cpos:n?step%cl:0,step});
   // drums
-  if(!P.mix.drums.m){
-    const out=dest('drums'),gl=P.glitch/100;
-    const fk=fillAt(pos,step);
+  for(let li=0;li<nBeat();li++)withBeat(li,()=>{
+    const bus=beatBus(li);if(P.mix[bus]&&P.mix[bus].m)return;
+    const out=dest(bus),gl=P.glitch/100;
+    const fk=li===0?fillAt(pos,step):-1;
     if(fk>=0){
       // roffel vlak voor een wissel: eerst achtsten, op het einde zestienden, steeds harder
       const z=fk/fillLen();
@@ -2131,11 +2149,11 @@ function playStep(abs,t0,sd,spb){
         for(let i=0;i<k;i++)drum(d.id,t+i*sd/k,vel*(1-i*0.15),out,sl,hm);
       }else drum(d.id,t,vel,out,sl,hm);
     }
-  }
+  });
   // melodie en bas
   const key=musicKey(),ch=chordAtStep(step);
-  for(const tr of ['A','B']){
-    if(P.mix[tr].m||(S.hum&&S.hum.tr===tr))continue;
+  for(const tr of melTracks()){
+    if((P.mix[tr]&&P.mix[tr].m)||(S.hum&&S.hum.tr===tr))continue;
     const T=P.mel[tr],out=dest(tr),nts=melVar(T,playVar(tr,step));
     for(const nt of nts) if(nt.s===pos)playNote(tr,T,nt,nts,step,pos,bpos,t,sd,key,ch,out);
   }
@@ -2249,7 +2267,7 @@ function quantPos(){
 }
 function hitPad(id){
   ensureCtx();S.ctx.resume();
-  drum(id,S.ctx.currentTime+0.005,1,S.bus.drums.in);
+  drum(id,S.ctx.currentTime+0.005,1,beatIn());
   const el=document.querySelector('.pad[data-id="'+id+'"]');
   if(el){el.classList.add('hit');setTimeout(()=>el.classList.remove('hit'),110);}
   if(S.liveRec&&S.playing){
@@ -2798,13 +2816,13 @@ function renderDrumGrid(){
           // plakje-modus: volgend plakje in dit vakje
           const n=smpCount(P.kit[d.id].slice(2));
           (P.dslc[d.id]=P.dslc[d.id]||new Array(MAXS).fill(-1))[s]=(slAt(d.id,s)+1)%n;save();paint();
-          if(!S.playing){ensureCtx();S.ctx.resume();drum(d.id,S.ctx.currentTime+0.01,1,S.bus.drums.in,slAt(d.id,s));}
+          if(!S.playing){ensureCtx();S.ctx.resume();drum(d.id,S.ctx.currentTime+0.01,1,beatIn(),slAt(d.id,s));}
           return;
         }
         if(S.ratMode&&P.drums[d.id][s]){
           // roffel-modus: 1 → 2 → 3 → 4 slagen in dit vakje
           (P.drat[d.id]=P.drat[d.id]||new Array(MAXS).fill(1))[s]=ratAt(d.id,s)%4+1;save();paint();
-          if(!S.playing){ensureCtx();S.ctx.resume();const n=ratAt(d.id,s),q=60/P.bpm/4;for(let i=0;i<n;i++)drum(d.id,S.ctx.currentTime+0.01+i*q/n,1-i*0.1,S.bus.drums.in,slAt(d.id,s));}
+          if(!S.playing){ensureCtx();S.ctx.resume();const n=ratAt(d.id,s),q=60/P.bpm/4;for(let i=0;i<n;i++)drum(d.id,S.ctx.currentTime+0.01+i*q/n,1-i*0.1,beatIn(),slAt(d.id,s));}
           return;
         }
         if(S.probMode&&P.drums[d.id][s]){
@@ -2820,7 +2838,7 @@ function renderDrumGrid(){
         if(!nv){if(P.dstn[d.id])P.dstn[d.id][s]=0;if(P.dsln[d.id])P.dsln[d.id][s]=1;if(P.drgl[d.id])P.drgl[d.id][s]=0;}
         if(nv&&isSmp(P.kit[d.id])){const a=P.dslc[d.id]=P.dslc[d.id]||new Array(MAXS).fill(-1);if(!(a[s]>=0))a[s]=P.dsl[d.id]||0;}
         save();paint();
-        if(nv&&!S.playing){ensureCtx();S.ctx.resume();drum(d.id,S.ctx.currentTime+0.005,nv===2?1:0.45,S.bus.drums.in,slAt(d.id,s));}
+        if(nv&&!S.playing){ensureCtx();S.ctx.resume();drum(d.id,S.ctx.currentTime+0.005,nv===2?1:0.45,beatIn(),slAt(d.id,s));}
       };
       (drumCells[s]=drumCells[s]||[]).push(c);
       box.appendChild(c);
@@ -2895,12 +2913,14 @@ function renderKeysHL(){
 function renderMel(){
   const T=P.mel[S.track];
   document.querySelectorAll('.seg button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.tr===S.track)));
-  $('melTitle').textContent=S.track==='A'?'Melodie':'Bas';
+  if(!P.mel[S.track])S.track='A';
+  renderTrackSeg();
+  $('melTitle').textContent=TRN[S.track];
   $('humFix').hidden=!(S.lastHum&&S.lastHum.tr===S.track);
   if(S.fillInst&&S.instFor!==S.track){S.fillInst($('instSel'),S.track==='B'?['Bas','Experimenteel','Akoestisch','Synths','Toetsen','Gitaar','Blazers & stem']:['Akoestisch','Experimenteel','Synths','Toetsen','Gitaar','Blazers & stem','Bas']);S.instFor=S.track;}
   $('instSel').value=T.inst;$('colSel').value=P.color[S.track]||'normaal';$('octVal').textContent=T.oct;$('lenSel').value=String(T.len);$('followCb').checked=!!T.follow;$('feel').value=T.feel==null?40:T.feel;$('feelVal').textContent=T.feel==null?40:T.feel;$('glideCb').checked=!!T.glide;
   renderVars();renderMelGrid();renderKeys();
-  $('rackTitle').textContent=S.track==='A'?'Klank van de melodie':'Klank van de bas';renderRack($('melRack'),S.track);renderRack($('chordRack'),'chords');
+  $('rackTitle').textContent='Klank van '+(S.track==='B'?'de bas':S.track==='A'?'de melodie':TRN[S.track]);renderRack($('melRack'),S.track);renderRack($('chordRack'),curChordBus());
 }
 function renderMelAll(){renderMel();}
 function markPos(pos,cpos){
@@ -2941,7 +2961,7 @@ function renderPick(){
       P.kit[id]=o.id;save();$('kitSel').value='mix';
       ensureCtx();S.ctx.resume();
       const pr=loadSample(id,o.id);if(pr&&pr.then)await pr;
-      drum(id,S.ctx.currentTime+0.01,1,S.bus.drums.in);
+      drum(id,S.ctx.currentTime+0.01,1,beatIn());
       renderPick();renderDrumGrid();renderPads();syncKitSel();
     };
     ch.appendChild(b);
@@ -2952,7 +2972,7 @@ function renderPick(){
   const tu=box.querySelector('.tune'),dc=box.querySelector('.dec');
   const lab=()=>{const a=(P.dtune[id]||0);box.querySelector('.tuv').textContent=(a>0?'+':'')+a+' halve tonen';box.querySelector('.dcv').textContent=Math.round((P.ddec[id]||1)*100)+'%';};
   tu.value=P.dtune[id]||0;dc.value=Math.round((P.ddec[id]||1)*100);lab();
-  let pv=null;const prev=()=>{clearTimeout(pv);pv=setTimeout(()=>{ensureCtx();S.ctx.resume();if(!S.playing)drum(id,S.ctx.currentTime+0.01,1,S.bus.drums.in);},120);};
+  let pv=null;const prev=()=>{clearTimeout(pv);pv=setTimeout(()=>{ensureCtx();S.ctx.resume();if(!S.playing)drum(id,S.ctx.currentTime+0.01,1,beatIn());},120);};
   tu.oninput=e=>{P.dtune[id]=+e.target.value;save();lab();prev();};
   dc.oninput=e=>{P.ddec[id]=+e.target.value/100;save();lab();prev();};
   const va=box.querySelector('.var'),vlab=()=>{box.querySelector('.vav').textContent=Math.round((P.dvar[id]||0)*100)+'%';};
@@ -2983,7 +3003,7 @@ function renderPads(){
 
 /* ---------- delen (couplet, refrein, bridge...) ---------- */
 // Wat bij een deel hoort. De rest (tempo, toonsoort, mix, effecten) geldt voor het hele nummer.
-const PART_KEYS=['drums','dmute','dprob','drat','dtune','ddec','dvol','dpan','drev','dsl','dslc','dstn','dsln','drgl','dvar','kit','mel','prog','sev','ext','twin','flow','rhythm','chordInst','chordFeel','change','ts','bars','color','mix','master','vocs'];
+const PART_KEYS=['drums','dmute','dprob','drat','dtune','ddec','dvol','dpan','drev','dsl','dslc','dstn','dsln','drgl','dvar','dlay','dcur','clay','ccur','kit','mel','prog','sev','ext','twin','flow','rhythm','chordInst','chordFeel','change','ts','bars','color','mix','master','vocs'];
 const PART_NAMES=['Couplet','Refrein','Bridge','Intro','Outro','Pre-refrein','Drop','Breakdown'];
 const PART_COLS=['#D9A92E','#E0703A','#4C8FD6','#4FAF5A','#8E7CD8','#C9577E','#2FA39B','#8F99A3'];
 fixProject.partFix=(d,o)=>{
@@ -2992,7 +3012,7 @@ fixProject.partFix=(d,o)=>{
   delete d.voc;
   if(d.mix&&!d.mix.V)d.mix.V=clone(defaultProject().mix.V);
   for(const k of PART_KEYS)if(d[k]===undefined)d[k]=clone(o[k]);
-  fixMel(d.mel);
+  fixLayers(d);fixMel(d.mel);
 };
 function snapPart(){syncMel(P.mel);const d={};for(const k of PART_KEYS)d[k]=clone(P[k]);return d;}
 function loadPart(d){
@@ -3010,15 +3030,15 @@ function doSwitch(i,fromSched){
   S.queued=null;
   if(i===P.cur||!P.parts[i]){renderParts();return;}
   P.parts[P.cur].data=snapPart();
-  loadPart(P.parts[i].data);P.cur=i;
+  loadPart(P.parts[i].data);P.cur=i;if(!P.mel[S.track])S.track='A';
   S.undo=[];if(S.hum)cancelHum('Inneuriën gestopt omdat je van deel wisselde.');
   if(S.vrec)cancelVocRec('Zangopname gestopt omdat je van deel wisselde.');
   if(S.pick)S.pick=null;
   refreshChords();
   refreshVoc(true);renderVoc();
   if(!fromSched){S.arpN=0;}
-  syncControls();renderProgs();renderSteps();renderDrumGrid();renderPads();renderPick();renderDrumMix();renderRack($('drumRack'),'drums');renderMel();renderMixer();renderParts();syncKitSel();
-  preloadKit();preloadInst();applyMix();save();renderFlow();if(S.cedit){S.cedit=null;renderCell();}
+  syncControls();renderProgs();renderSteps();renderDrumGrid();renderPads();renderPick();renderDrumMix();renderRack($('drumRack'),curBeatBus());renderMel();renderMixer();renderParts();syncKitSel();
+  preloadKit();preloadInst();applyMix();save();renderFlow();renderBeatLayers();renderChordLayers();if(S.cedit){S.cedit=null;renderCell();}
 }
 function selectPart(i){
   if(S.songRun){S.songRun=false;S.queued=null;renderSong();msg('Songmodus gepauzeerd: je koos zelf een deel. Druk op ▶ Speel het nummer om opnieuw van voor af te beginnen.');}
@@ -3031,7 +3051,7 @@ function selectPart(i){
 function addPart(name,mode){
   const id=Math.max(...P.parts.map(x=>x.id))+1;
   const d=snapPart();
-  if(mode==='leeg'){d.drums=emptyDrums();d.mel=clone(d.mel);for(const tr of ['A','B'])Object.assign(d.mel[tr],{notes:[],vars:[[]],seq:[0],ed:0});d.vocs=d.vocs.map(t=>Object.assign(clone(t),{take:null,nudge:0}));}
+  if(mode==='leeg'){d.drums=emptyDrums();d.mel=clone(d.mel);for(const tr of MELTR)if(d.mel[tr])Object.assign(d.mel[tr],{notes:[],vars:[[]],seq:[0],ed:0});d.dlay=(d.dlay||[]).map(L=>L?Object.assign({},L,{drums:emptyDrums()}):L);d.vocs=d.vocs.map(t=>Object.assign(clone(t),{take:null,nudge:0}));}
   P.parts.push({id,name,data:d});save();
   closePartPanel();
   selectPart(P.parts.length-1);
@@ -3268,6 +3288,7 @@ function applyScene(i){
   const pi=PROGS[mode].findIndex(x=>x.n===pn);P.prog=pi<0?0:pi;
   P.rhythm=sc.rhythm;P.chordInst=sc.chordInst;P.change=sc.change;
   P.mix=clone(p.mix);for(const b in sc.mix)Object.assign(P.mix[b],sc.mix[b]);
+  P.dlay=[];P.dcur=0;P.clay=[];P.ccur=0;delete P.mel.C;delete P.mel.D;if(!P.mel[S.track])S.track='A';
   P.color=Object.assign({A:'normaal',B:'normaal',chords:'normaal'},sc.color||{});
   P.master=Object.assign(clone(p.master),sc.master);
   save();
@@ -3289,13 +3310,13 @@ function renderScenes(){
 }
 
 /* ---------- mixer ---------- */
-const BUSN={drums:'Drums',chords:'Akkoorden',A:'Melodie',B:'Bas',V:'Zang (alle sporen)'};
+const BUSN={drums:'Drums',drums2:'Beat 2',drums3:'Beat 3',chords:'Akkoorden',chords2:'Akkoorden 2',chords3:'Akkoorden 3',A:'Melodie',B:'Bas',C:'Melodie 2',D:'Melodie 3',V:'Zang (alle sporen)'};
 function renderMixer(){
   const box=$('mixer');box.innerHTML='';
   if(P.parts){const mp=$('mixPart');mp.textContent='Mix van: '+P.parts[P.cur].name;mp.style.setProperty('--pc',partCol(P.cur));}
-  for(const b of ['drums','chords','A','B','V']){
-    const m=P.mix[b]||(P.mix[b]=clone(defaultProject().mix[b])),row=document.createElement('div');row.className='mixrow';
-    row.innerHTML='<div class="mixname"><b>'+BUSN[b]+'</b><button type="button" class="btn sm mute">'+(m.m?'Gedempt':'Dempen')+'</button></div>'+
+  for(const b of allBuses()){
+    const m=P.mix[b]||(P.mix[b]=mixDefault(b)),row=document.createElement('div');row.className='mixrow';
+    row.innerHTML='<div class="mixname"><b>'+busName(b)+'</b><button type="button" class="btn sm mute">'+(m.m?'Gedempt':'Dempen')+'</button></div>'+
       '<div class="mixsl">'+
       '<label>Volume<input type="range" min="0" max="200" data-k="v" value="'+Math.round(m.v*100)+'"></label>'+
       '<label>Galm<input type="range" min="0" max="100" data-k="r" value="'+Math.round(m.r*100)+'"></label>'+
@@ -3313,7 +3334,7 @@ function renderMixer(){
     more.onclick=()=>{S.mixOpen=S.mixOpen||{};S.mixOpen[b]=!S.mixOpen[b];rb.hidden=!S.mixOpen[b];more.textContent=S.mixOpen[b]?'▴ Klank & EQ':'▾ Klank & EQ';if(S.mixOpen[b])renderRack(rb,b,true);};
     if(open)renderRack(rb,b,true);
     const fs=row.querySelector('[data-fx]');
-    for(const k in BFX){if(k==='pomp'&&b==='drums')continue;const o=document.createElement('option');o.value=k;o.textContent=BFX[k];fs.appendChild(o);}
+    for(const k in BFX){if(k==='pomp'&&b.startsWith('drums'))continue;const o=document.createElement('option');o.value=k;o.textContent=BFX[k];fs.appendChild(o);}
     fs.value=m.fx||'geen';row.querySelector('[data-k=fa]').disabled=fs.value==='geen';
     fs.onchange=e=>{m.fx=e.target.value;if(m.fa==null)m.fa=0.5;row.querySelector('[data-k=fa]').disabled=m.fx==='geen';save();applyMix();};
     row.querySelectorAll('input[data-k]').forEach(inp=>inp.oninput=e=>{m[e.target.dataset.k]=e.target.value/100;save();applyMix();});
@@ -3516,7 +3537,7 @@ function renderDrumMix(){
       lv();save();
     });
     // bij loslaten even laten horen als de muziek niet speelt
-    row.querySelectorAll('input').forEach(inp=>inp.onchange=()=>{if(!S.playing){ensureCtx();S.ctx.resume();drum(d.id,S.ctx.currentTime+0.01,1,S.bus.drums.in);}});
+    row.querySelectorAll('input').forEach(inp=>inp.onchange=()=>{if(!S.playing){ensureCtx();S.ctx.resume();drum(d.id,S.ctx.currentTime+0.01,1,beatIn());}});
     box.appendChild(row);
   });
 }
@@ -3556,7 +3577,7 @@ async function autoBalance(){
   const btn=$('mixBal');btn.disabled=true;
   if(!S.playing)play();
   const an={},buf=new Float32Array(2048);
-  for(const b in BAL_TARGET){const a=S.ctx.createAnalyser();a.fftSize=2048;S.bus[b].pre.connect(a);an[b]={a,s:0,n:0};}
+  for(const b of allBuses()){ensureBus(b);const a=S.ctx.createAnalyser();a.fftSize=2048;S.bus[b].pre.connect(a);an[b]={a,s:0,n:0};}
   const t0=performance.now(),dur=4000;
   while(performance.now()-t0<dur){
     btn.textContent='Even luisteren… '+Math.ceil((dur-(performance.now()-t0))/1000)+' s';
@@ -3568,11 +3589,11 @@ async function autoBalance(){
     try{S.bus[b].pre.disconnect(an[b].a);}catch(e){}
     const m=P.mix[b],lvl=10*Math.log10(an[b].s/an[b].n+1e-12);
     if(m.m||lvl<-60)continue; // gedempt of stil: niet aanraken
-    nv[b]=Math.pow(10,(BAL_TARGET[b]-lvl)/20);
+    nv[b]=Math.pow(10,(balTarget(b)-lvl)/20);
   }
   // verhoudingen behouden, maar het luidste spoor op hoogstens 120%: luider maken doe je met Luidheid
   const mx=Math.max(0,...Object.values(nv)),k=mx>1.2?1.2/mx:1;
-  for(const b in nv){const m=P.mix[b];m.v=Math.max(0.05,Math.min(2,Math.round(nv[b]*k*20)/20));changed.push(BUSN[b].replace(' (alle sporen)','')+' '+Math.round(m.v*100)+'%');}
+  for(const b in nv){const m=P.mix[b];m.v=Math.max(0.05,Math.min(2,Math.round(nv[b]*k*20)/20));changed.push(busName(b).replace(' (alle sporen)','')+' '+Math.round(m.v*100)+'%');}
   save();applyMix();renderMixer();
   btn.disabled=false;btn.textContent='⚖ Automatisch in balans';
   msg(changed.length?'In balans gezet: '+changed.join(', ')+'. Niet goed? Schuif gerust zelf verder.':'Ik hoorde nog niets. Zet eerst wat noten of drums in dit deel.');
@@ -3825,7 +3846,7 @@ const VARCOLS=['#B86A00','#4C8FD6','#4FAF5A','#C9577E','#8E7CD8','#2FA39B','#E07
 function varCol(i){return VARCOLS[i%VARCOLS.length];}
 function fixMel(mel){
   if(!mel)return;
-  for(const tr of ['A','B']){
+  for(const tr of MELTR){
     const T=mel[tr];if(!T)continue;
     if(!Array.isArray(T.vars)||!T.vars.length)T.vars=[Array.isArray(T.notes)?T.notes:[]];
     T.vars=T.vars.slice(0,VARMAX).map(v=>Array.isArray(v)?v:[]);
@@ -3835,10 +3856,10 @@ function fixMel(mel){
     T.seq=(Array.isArray(T.seq)&&T.seq.length?T.seq:[0]).slice(0,SEQMAX).map(x=>Math.max(0,Math.min(T.vars.length-1,x|0)));
   }
 }
-function syncMel(mel){if(!mel)return;for(const tr of ['A','B']){const T=mel[tr];if(T&&Array.isArray(T.vars))T.vars[T.ed||0]=T.notes;}}
+function syncMel(mel){if(!mel)return;for(const tr of MELTR){const T=mel[tr];if(T&&Array.isArray(T.vars))T.vars[T.ed||0]=T.notes;}}
 function seqOf(T){return T&&Array.isArray(T.seq)&&T.seq.length?T.seq:[0];}
 function seqLen(tr){return seqOf(P.mel[tr]).length;}
-function seqMax(){return Math.max(seqLen('A'),seqLen('B'));}
+function seqMax(){return Math.max(...melTracks().map(seqLen));}
 function melVar(T,v){return v===(T.ed||0)?T.notes:((T.vars&&T.vars[v])||[]);}
 function playVar(tr,step){
   const T=P.mel[tr];
@@ -4846,7 +4867,7 @@ function smpDrum(row,id,t,vel,out,sl,hm){
   const info=smpSlice(e,sl==null?(P.dsl[row]||0):sl);if(!info)return;
   const c=S.ctx,tu=((P.dtune&&P.dtune[row])||0)+(hm&&hm.tu||0),dc=Math.max(0.05,((P.ddec&&P.ddec[row])||1)*(hm&&hm.dc!=null?hm.dc:1)),rate=Math.pow(2,tu/12);
   const play=info.dur*dc,len=play/rate,v=vel*SGAIN;
-  const pv=S.schoke[row];
+  const ck=(S.beatCtx==null?(P.dcur||0):S.beatCtx)+':'+row,pv=S.schoke[ck];
   if(pv&&pv.end>t){try{pv.g.gain.cancelScheduledValues(t);pv.g.gain.setTargetAtTime(0,t,0.004);}catch(_){}}
   const src=c.createBufferSource(),g=c.createGain();
   src.buffer=info.buf;src.playbackRate.value=rate;src.connect(g);g.connect(out);
@@ -4854,7 +4875,7 @@ function smpDrum(row,id,t,vel,out,sl,hm){
   const fo=Math.min(0.012,len/3);
   g.gain.setValueAtTime(v,Math.max(t+0.002,t+len-fo));g.gain.linearRampToValueAtTime(0,t+len);
   src.start(t,info.off,play+0.005);src.stop(t+len+0.02);
-  S.schoke[row]={g,end:t+len};
+  S.schoke[ck]={g,end:t+len};
 }
 // Een plakje los beluisteren (op de golfvorm tikken).
 function smpAudition(id,k){
@@ -4863,7 +4884,7 @@ function smpAudition(id,k){
   const info=smpSlice(e,k);if(!info)return;
   if(S.splay){try{S.splay.stop();}catch(_){}}
   const t=S.ctx.currentTime+0.01,src=S.ctx.createBufferSource(),g=S.ctx.createGain();
-  src.buffer=info.buf;g.gain.value=SGAIN;src.connect(g);g.connect(S.bus.drums.in);
+  src.buffer=info.buf;g.gain.value=SGAIN;src.connect(g);g.connect(beatIn());
   src.start(t,info.off,info.dur);S.splay=src;
   S.ctxTouch=performance.now()+info.dur*1000; // lang beluisteren niet laten stilleggen
   S.shl={k,until:performance.now()+info.dur*1000};drawSmp();setTimeout(drawSmp,info.dur*1000+30);
@@ -4979,7 +5000,7 @@ function smpPut(row,id){
   P.kit[row]='u:'+id;P.dsl[row]=0;
   const a=P.dslc[row];if(a)a.fill(-1);
   save();renderDrumGrid();renderPads();syncKitSel();if(S.pick)renderPick();
-  smpEnsure(id).then(()=>{if(!S.playing){ensureCtx();S.ctx.resume();drum(row,S.ctx.currentTime+0.01,1,S.bus.drums.in);}}).catch(()=>{});
+  smpEnsure(id).then(()=>{if(!S.playing){ensureCtx();S.ctx.resume();drum(row,S.ctx.currentTime+0.01,1,beatIn());}}).catch(()=>{});
   const d=DRUMS.find(x=>x.id===row);
   msg('"'+S.smeta.get(id).name+'" speelt nu op de rij '+d.n+'. Tik op '+d.n+' in het drumpatroon om het plakje te kiezen.');
 }
@@ -5129,7 +5150,7 @@ function smpPickSection(box,row,ch){
     const sc=div.querySelector('.slc');
     for(let k=0;k<n;k++){
       const b=document.createElement('button');b.type='button';b.className='chip'+(k===dflt?' on':'');b.textContent=String(k+1);
-      b.onclick=()=>{P.dsl[row]=k;save();renderPick();smpEnsure(cur).then(()=>{ensureCtx();S.ctx.resume();drum(row,S.ctx.currentTime+0.01,1,S.bus.drums.in,k);}).catch(()=>{});};
+      b.onclick=()=>{P.dsl[row]=k;save();renderPick();smpEnsure(cur).then(()=>{ensureCtx();S.ctx.resume();drum(row,S.ctx.currentTime+0.01,1,beatIn(),k);}).catch(()=>{});};
       sc.appendChild(b);
     }
     div.querySelector('.chop').onclick=()=>smpEnsure(cur).then(()=>smpChop(row,cur)).catch(()=>{});
@@ -5209,7 +5230,7 @@ function cellPreview(){
   const E=S.cedit;if(!E||S.playing)return;
   ensureCtx();S.ctx.resume();
   const hm=hitMod(E.row,E.s),rt=ratAt(E.row,E.s),gs=glAt(E.row,E.s),q=60/P.bpm/4,t0=S.ctx.currentTime+0.01;
-  for(let i=0;i<rt;i++)drum(E.row,t0+i*q/rt,1-i*0.1,S.bus.drums.in,slAt(E.row,E.s),{tu:hm.tu+gs*i,dc:hm.dc});
+  for(let i=0;i<rt;i++)drum(E.row,t0+i*q/rt,1-i*0.1,beatIn(),slAt(E.row,E.s),{tu:hm.tu+gs*i,dc:hm.dc});
 }
 function renderCell(){
   const box=$('cellEdit');if(!box)return;
@@ -5341,7 +5362,7 @@ function setupText(){
 function songList(){return (P.song||[]).filter(id=>P.parts.some(p=>p.id===id));}
 function songIdx(k){const L=songList();return k>=0&&k<L.length?P.parts.findIndex(p=>p.id===L[k]):-1;}
 function partData(i){return i===P.cur?P:(P.parts[i]&&P.parts[i].data)||P;}
-function cycleSteps(d){const ml=t=>t&&Array.isArray(t.seq)&&t.seq.length?t.seq.length:1;return (TS[d.ts]||TS['4/4']).n*(d.bars||1)*Math.max(ml(d.mel&&d.mel.A),ml(d.mel&&d.mel.B));}
+function cycleSteps(d){const ml=t=>t&&Array.isArray(t.seq)&&t.seq.length?t.seq.length:1;return (TS[d.ts]||TS['4/4']).n*(d.bars||1)*Math.max(1,...MELTR.map(k=>d.mel&&d.mel[k]?ml(d.mel[k]):1));}
 // Vanuit de planner, bij elke stap: aan het einde van een deel het volgende uit de lijst laden.
 function songStep(abs,t0){
   const l0=abs-S.partStart;
@@ -5563,6 +5584,139 @@ function setupSeq(){
   renderSeq();
 }
 
+
+/* ---------- lagen: meerdere beats, melodieën en akkoordlagen tegelijk ---------- */
+// Beat en akkoorden: de laag die je bewerkt, staat gewoon in P (zo blijft alle bestaande code werken);
+// de andere lagen staan in P.dlay / P.clay (op de plek van de gekozen laag staat null) en worden tijdens
+// het afspelen per stap even ingewisseld (withBeat / withChord). Melodie: extra sporen C en D in P.mel.
+const MELTR=['A','B','C','D'],TRN={A:'Melodie',B:'Bas',C:'Melodie 2',D:'Melodie 3'};
+const BEAT_KEYS=['drums','dmute','kit','dprob','drat','dtune','ddec','dvol','dpan','drev','dsl','dslc','dstn','dsln','drgl','dvar'];
+const CHORD_KEYS=['rhythm','chordInst','chordFeel','twin'];
+const LMAX=3;
+function melTracks(){return MELTR.filter(t=>P.mel&&P.mel[t]);}
+function nBeat(){return Array.isArray(P.dlay)&&P.dlay.length>1?P.dlay.length:1;}
+function nChord(){return Array.isArray(P.clay)&&P.clay.length>1?P.clay.length:1;}
+function beatBus(i){return i?'drums'+(i+1):'drums';}
+function chordBus(i){return i?'chords'+(i+1):'chords';}
+function curBeatBus(){return beatBus(nBeat()>1?P.dcur||0:0);}
+function curChordBus(){return chordBus(nChord()>1?P.ccur||0:0);}
+function beatIn(){const b=curBeatBus();ensureCtx();if(!S.bus[b])makeBus(S.ctx,b);return S.bus[b].in;}
+function allBuses(){const b=[];for(let i=0;i<nBeat();i++)b.push(beatBus(i));for(let i=0;i<nChord();i++)b.push(chordBus(i));return b.concat(melTracks(),['V']);}
+function busName(b){if(b==='drums'&&nBeat()>1)return 'Beat 1';if(b==='chords'&&nChord()>1)return 'Akkoorden 1';return BUSN[b]||b;}
+function mixDefault(b){const d=defaultProject().mix;if(d[b])return clone(d[b]);if(b.startsWith('drums'))return Object.assign(clone(d.drums),{v:0.7});if(b.startsWith('chords'))return Object.assign(clone(d.chords),{v:0.55});return clone(d.A);}
+function balTarget(b){return b==='drums'?-17:b.startsWith('drums')?-20:b==='chords'?-23:b.startsWith('chords')?-25:({A:-21,B:-19,C:-23,D:-23,V:-18})[b]||-22;}
+function withBeat(i,fn){
+  const L=nBeat()>1&&i!==P.dcur?P.dlay[i]:null,prev=S.beatCtx;S.beatCtx=i;
+  if(!L){try{return fn();}finally{S.beatCtx=prev;}}
+  const keep={};for(const k of BEAT_KEYS){keep[k]=P[k];P[k]=L[k];}
+  try{return fn();}finally{for(const k of BEAT_KEYS)P[k]=keep[k];S.beatCtx=prev;}
+}
+function withChord(i,fn){
+  const L=nChord()>1&&i!==P.ccur?P.clay[i]:null;S.arpNs=S.arpNs||{};
+  const keepN=S.arpN;S.arpN=S.arpNs[i]||0;
+  const keep={};if(L)for(const k of CHORD_KEYS){keep[k]=P[k];P[k]=L[k];}
+  try{return fn();}finally{if(L)for(const k of CHORD_KEYS)P[k]=keep[k];S.arpNs[i]=S.arpN;S.arpN=keepN;}
+}
+function fixLayers(o){
+  if(!o)return;
+  const fixB=L=>{if(!L)return L;for(const k of BEAT_KEYS)if(L[k]==null)L[k]=k==='drums'?emptyDrums():{};DRUMS.forEach(x=>{const a=L.drums[x.id];if(!Array.isArray(a)||a.length<MAXS)L.drums[x.id]=(a||[]).concat(new Array(MAXS).fill(0)).slice(0,MAXS);});return L;};
+  if(!Array.isArray(o.dlay)||o.dlay.length<2){o.dlay=[];o.dcur=0;}
+  else{o.dlay=o.dlay.slice(0,LMAX).map(fixB);o.dcur=Math.max(0,Math.min(o.dlay.length-1,o.dcur|0));o.dlay[o.dcur]=null;}
+  if(!Array.isArray(o.clay)||o.clay.length<2){o.clay=[];o.ccur=0;}
+  else{o.clay=o.clay.slice(0,LMAX).map(L=>L?Object.assign({rhythm:'pad',chordInst:'auto',chordFeel:40,twin:false},L):L);o.ccur=Math.max(0,Math.min(o.clay.length-1,o.ccur|0));o.clay[o.ccur]=null;}
+}
+function snapKeys(keys){const o={};for(const k of keys)o[k]=P[k];return o;}
+// --- beats ---
+function selectBeat(i){
+  if(nBeat()<2||i===P.dcur||!P.dlay[i])return;
+  P.dlay[P.dcur]=snapKeys(BEAT_KEYS);
+  const L=P.dlay[i];for(const k of BEAT_KEYS)P[k]=L[k];
+  P.dlay[i]=null;P.dcur=i;S.undo=[];S.pick=null;if(typeof cellModeOff==='function')cellModeOff();
+  save();renderBeatAll();
+}
+function renderBeatAll(){renderBeatLayers();renderDrumGrid();renderPads();renderPick();renderDrumMix();renderRack($('drumRack'),curBeatBus());syncKitSel();preloadKit();
+  const t=$('drumRackTitle');if(t)t.textContent=nBeat()>1?'Klank van '+busName(curBeatBus()):'Klank van de drums';}
+function addBeat(){
+  const n=nBeat();if(n>=LMAX){msg('Hoogstens '+LMAX+' beats tegelijk.');return;}
+  if(n===1){P.dlay=[null];P.dcur=0;}
+  const L={};for(const k of BEAT_KEYS)L[k]=k==='drums'?emptyDrums():k==='kit'?Object.assign({},P.kit):{};
+  P.dlay.push(L);const i=P.dlay.length-1;P.mix[beatBus(i)]=mixDefault(beatBus(i));
+  if(S.ctx)ensureBus(beatBus(i));
+  selectBeat(i);renderMixer();
+  msg('Beat '+(i+1)+' gemaakt: leeg, met dezelfde kit. Kies bij "Drumkit" een andere kit of zet er een sample op, en tik je patroon in. Beide beats spelen tegelijk.');
+}
+function removeBeat(){
+  const n=nBeat();if(n<2)return;
+  const k=P.dcur,to=k>0?k-1:1;
+  selectBeat(to);
+  P.dlay.splice(k,1);
+  for(let i=k;i<n-1;i++)P.mix[beatBus(i)]=P.mix[beatBus(i+1)];delete P.mix[beatBus(n-1)];
+  P.dcur=to>k?to-1:to;
+  if(P.dlay.length<2){P.dlay=[];P.dcur=0;}
+  save();renderBeatAll();renderMixer();applyMix();msg('Beat verwijderd.');
+}
+// --- akkoordlagen ---
+function selectChordLayer(i){
+  if(nChord()<2||i===P.ccur||!P.clay[i])return;
+  P.clay[P.ccur]=snapKeys(CHORD_KEYS);
+  const L=P.clay[i];for(const k of CHORD_KEYS)P[k]=L[k];
+  P.clay[i]=null;P.ccur=i;
+  save();renderChordAll();
+}
+function renderChordAll(){renderChordLayers();syncControls();renderSteps();renderChordInfo();renderRack($('chordRack'),curChordBus());const i=chordInstNow();if(i)loadInst(i);
+  const t=$('chordRackTitle');if(t)t.textContent=nChord()>1?'Klank van '+busName(curChordBus()):'Klank van de akkoorden';}
+function addChordLayer(){
+  const n=nChord();if(n>=LMAX){msg('Hoogstens '+LMAX+' akkoordlagen.');return;}
+  if(n===1){P.clay=[null];P.ccur=0;}
+  P.clay.push({rhythm:P.rhythm==='arp8'?'pad':'arp8',chordInst:'auto',chordFeel:40,twin:false});
+  const i=P.clay.length-1,b=chordBus(i);P.mix[b]=mixDefault(b);P.color[b]='normaal';
+  if(S.ctx)ensureBus(b);
+  selectChordLayer(i);renderMixer();
+  msg('Akkoordlaag '+(i+1)+' gemaakt. Kies een ander ritme en een andere klank: bv. strijkers als pad en een gitaar die arpeggieert.');
+}
+function removeChordLayer(){
+  const n=nChord();if(n<2)return;
+  const k=P.ccur,to=k>0?k-1:1;
+  selectChordLayer(to);
+  P.clay.splice(k,1);
+  for(let i=k;i<n-1;i++){P.mix[chordBus(i)]=P.mix[chordBus(i+1)];P.color[chordBus(i)]=P.color[chordBus(i+1)];}
+  delete P.mix[chordBus(n-1)];delete P.color[chordBus(n-1)];
+  P.ccur=to>k?to-1:to;
+  if(P.clay.length<2){P.clay=[];P.ccur=0;}
+  save();renderChordAll();renderMixer();applyMix();msg('Akkoordlaag verwijderd.');
+}
+// --- melodiesporen ---
+function addTrack(){
+  const t=['C','D'].find(x=>!P.mel[x]);if(!t){msg('Hoogstens 4 sporen: melodie, bas, melodie 2 en melodie 3.');return;}
+  P.mel[t]={notes:[],inst:t==='C'?'rhodes':'strings',oct:t==='C'?4:5,len:2,follow:false,vars:[[]],seq:[0],ed:0,feel:40};
+  P.mix[t]=mixDefault(t);P.color[t]='normaal';
+  S.track=t;if(S.ctx)ensureBus(t);save();renderMel();renderMixer();preloadInst();
+  msg(TRN[t]+' gemaakt. Kies een klank en tik je noten in: hij speelt samen met de melodie en de bas.');
+}
+function removeTrack(){
+  const t=S.track;if(t!=='C'&&t!=='D')return;
+  delete P.mel[t];delete P.mix[t];S.track='A';save();renderMel();renderMixer();applyMix();msg(TRN[t]+' verwijderd.');
+}
+function layerChips(box,n,cur,label,onSel,onAdd,onDel){
+  box.innerHTML='';
+  for(let i=0;i<n;i++){const b=document.createElement('button');b.type='button';b.className='chip'+(i===cur?' on':'');b.textContent=label+' '+(i+1);b.onclick=()=>onSel(i);box.appendChild(b);}
+  if(n<LMAX){const a=document.createElement('button');a.type='button';a.className='chip';a.textContent='＋ '+label;a.onclick=onAdd;box.appendChild(a);}
+  if(n>1){const d=document.createElement('button');d.type='button';d.className='chip';d.textContent='Verwijder '+label.toLowerCase()+' '+(cur+1);
+    d.onclick=()=>{if(d.dataset.sure!=='1'){d.dataset.sure='1';d.textContent='Zeker? Tik nog eens';setTimeout(()=>{d.dataset.sure='';d.textContent='Verwijder '+label.toLowerCase()+' '+(cur+1);},4000);return;}onDel();};box.appendChild(d);}
+}
+function renderBeatLayers(){const b=$('beatLayers');if(b)layerChips(b,nBeat(),nBeat()>1?P.dcur:0,'Beat',selectBeat,addBeat,removeBeat);}
+function renderChordLayers(){const b=$('chordLayers');if(b)layerChips(b,nChord(),nChord()>1?P.ccur:0,'Laag',selectChordLayer,addChordLayer,removeChordLayer);}
+function renderTrackSeg(){
+  const box=$('trackSeg');if(!box)return;box.innerHTML='';
+  melTracks().forEach(t=>{const b=document.createElement('button');b.type='button';b.dataset.tr=t;b.textContent=TRN[t];b.setAttribute('aria-pressed',String(t===S.track));b.onclick=()=>{S.track=t;renderMel();};box.appendChild(b);});
+  $('trackAdd').hidden=melTracks().length>=4;$('trackDel').hidden=!(S.track==='C'||S.track==='D');
+}
+function setupLayers(){
+  $('trackAdd').onclick=addTrack;
+  $('trackDel').onclick=()=>{const d=$('trackDel');if(d.dataset.sure!=='1'){d.dataset.sure='1';d.textContent='Zeker? Tik nog eens';setTimeout(()=>{d.dataset.sure='';d.textContent='Verwijder spoor';},4000);return;}d.dataset.sure='';d.textContent='Verwijder spoor';removeTrack();};
+  renderBeatLayers();renderChordLayers();renderTrackSeg();
+}
+
 function tick(ts){
   requestAnimationFrame(tick);
   if(S.playing&&S.ctx){
@@ -5594,13 +5748,14 @@ function syncControls(){
   $('rhythm').value=P.rhythm;$('chordInst').value=P.chordInst;$('changeSel').value=P.change;$('extSel').value=String(chordExt(P));$('twinCb').checked=!!P.twin;
   $('mVol').value=Math.round(P.master.v*100);$('mVolVal').textContent=Math.round(P.master.v*100)+'%';$('mLoud').value=P.master.loud==null?40:P.master.loud;$('mLoudVal').textContent=(P.master.loud==null?40:P.master.loud)+'%';$('mFilter').value=P.master.filter;$('mLofi').value=P.master.lofi;
   $('mDly').value=String(P.master.dly);$('mFb').value=P.master.fb;$('mVinyl').value=P.master.vinyl||0;$('mRoom').value=P.master.room||'zaal';
-  $('chordCol').value=P.color.chords||'normaal';$('chordFeel').value=P.chordFeel==null?40:P.chordFeel;$('chordFeelVal').textContent=P.chordFeel==null?40:P.chordFeel;renderChordInfo();
+  $('chordCol').value=P.color[curChordBus()]||'normaal';$('chordFeel').value=P.chordFeel==null?40:P.chordFeel;$('chordFeelVal').textContent=P.chordFeel==null?40:P.chordFeel;renderChordInfo();
 }
 function renderAll(){
   syncKitSel();preloadKit();preloadInst();
-  renderScenes();renderProgs();refreshChords();renderSteps();renderDrumGrid();renderPads();renderDrumMix();renderRack($('drumRack'),'drums');renderMasterEQ();renderMel();renderParts();renderMixer();renderKey();
+  renderScenes();renderProgs();refreshChords();renderSteps();renderDrumGrid();renderPads();renderDrumMix();renderRack($('drumRack'),curBeatBus());renderMasterEQ();renderMel();renderParts();renderMixer();renderKey();
   refreshVoc(true);renderVoc();
   if(typeof renderSeq==='function')renderSeq();
+  if(typeof renderBeatLayers==='function'){renderBeatLayers();renderChordLayers();const a=$('drumRackTitle');if(a)a.textContent=nBeat()>1?'Klank van '+busName(curBeatBus()):'Klank van de drums';const c=$('chordRackTitle');if(c)c.textContent=nChord()>1?'Klank van '+busName(curChordBus()):'Klank van de akkoorden';}
   if(typeof renderFlow==='function'){renderFlow();const lt=$('lyrText');if(lt&&document.activeElement!==lt)lt.value=P.lyrics||'';}
 }
 function showTab(t){
@@ -5609,15 +5764,15 @@ function showTab(t){
   document.querySelectorAll('.page').forEach(p=>p.hidden=p.id!=='page-'+t);
   if(t==='voc'){renderVoc();renderFlow();requestAnimationFrame(drawVoc);}
   if(t==='mix'){renderMixer();renderMasterEQ();renderSong();renderSeq();}
-  if(t==='beat'){renderDrumMix();renderRack($('drumRack'),'drums');fillSmpFrom();requestAnimationFrame(drawSmp);}
-  if(t==='mel'||t==='chords'){renderRack($('melRack'),S.track);renderRack($('chordRack'),'chords');}
+  if(t==='beat'){renderDrumMix();renderRack($('drumRack'),curBeatBus());fillSmpFrom();requestAnimationFrame(drawSmp);}
+  if(t==='mel'||t==='chords'){renderRack($('melRack'),S.track);renderRack($('chordRack'),curChordBus());}
 }
 function setBpm(v){
   P.bpm=Math.max(50,Math.min(190,v));$('bpm').value=P.bpm;$('bpmVal').textContent=P.bpm;$('tbBpm').textContent=P.bpm;
   save();applyMix();
 }
 function structChanged(){
-  for(const tr of ['A','B']){const T=P.mel[tr];syncMel(P.mel);T.vars=T.vars.map(v=>v.filter(n=>n.s<patLen()));T.notes=T.vars[T.ed];}
+  for(const tr of melTracks()){const T=P.mel[tr];syncMel(P.mel);T.vars=T.vars.map(v=>v.filter(n=>n.s<patLen()));T.notes=T.vars[T.ed];}
   save();renderDrumGrid();renderMelGrid();renderSteps();renderTransport();renderFlow();
 }
 function init(){
@@ -5698,14 +5853,14 @@ function init(){
   document.querySelectorAll('.undoBtn').forEach(b=>b.onclick=undo);
   document.querySelectorAll('.liveRecBtn').forEach(b=>b.onclick=()=>setLiveRec(!S.liveRec));
   // melodie
-  document.querySelectorAll('.seg button').forEach(b=>b.onclick=()=>{S.track=b.dataset.tr;renderMel();});
+
   $('instSel').onchange=async e=>{
     P.mel[S.track].inst=e.target.value;save();ensureCtx();S.ctx.resume();
     const pr=loadInst(e.target.value);if(pr&&pr.then){msg('Instrument laden…');await pr;msg('');}
     hitKey(0);
   };
   $('colSel').onchange=e=>{P.color[S.track]=e.target.value;save();applyMix();};
-  $('chordCol').onchange=e=>{P.color.chords=e.target.value;save();applyMix();};
+  $('chordCol').onchange=e=>{P.color[curChordBus()]=e.target.value;save();applyMix();};
   $('mVinyl').oninput=e=>{P.master.vinyl=+e.target.value;save();applyMix();};
   for(const k in ROOMS){const o=document.createElement('option');o.value=k;o.textContent=ROOMS[k].n;$('mRoom').appendChild(o);}
   $('mRoom').onchange=e=>{P.master.room=e.target.value;save();applyMix();};
@@ -5719,7 +5874,7 @@ function init(){
   $('feel').oninput=e=>{P.mel[S.track].feel=+e.target.value;$('feelVal').textContent=e.target.value;save();};
   $('glideCb').onchange=e=>{P.mel[S.track].glide=e.target.checked;save();};
   $('humBtn').onclick=toggleHum;
-  setupVoc();setupVars();setupBackup();setupSampler();setupIdle();setupCells();setupText();setupSong();setupSeq();
+  setupVoc();setupVars();setupBackup();setupSampler();setupIdle();setupCells();setupText();setupSong();setupSeq();setupLayers();
   $('humNudge').oninput=e=>nudgeHum(+e.target.value);
   $('melRand').onclick=randomMel;
   $('melClear').onclick=()=>{pushUndo();P.mel[S.track].notes=[];save();renderMelGrid();msg((S.track==='A'?'Melodie':'Bas')+' gewist. ↶ zet hem terug.');};

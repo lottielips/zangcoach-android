@@ -29,6 +29,11 @@ eindpoort dicht, worden galm/echo vervangen door verse (`flushTails`) en wordt d
 (`startTimer`) en plant met het scherm uit 1,5 s vooruit; na een hapering slaat hij gemiste stappen over.
 
 ## Versies
+- **3.6** – Lagen die tegelijk spelen: tot 3 beats (`P.dlay`/`P.dcur`, sporen `drums`, `drums2`, `drums3`), tot 3
+  akkoordlagen (`P.clay`/`P.ccur`, sporen `chords`…`chords3`, zelfde akkoorden, eigen ritme/klank) en extra
+  melodiesporen C en D (`P.mel.C/D`). De gekozen laag staat in P; de andere worden per stap ingewisseld
+  (`withBeat`/`withChord`). Sporen worden pas gemaakt als je ze nodig hebt (`makeBus`/`ensureBus`); sporen van
+  lagen die er niet (meer) zijn, zwijgen.
 - **3.5** – Slimme EQ (Mix & opname): meet 6 s het spectrum in 29 tertsbanden (`seqMeasure`, vóór de EQ), vergelijkt met
   een doelcurve (`refCurve` = gemiddelde van commerciële mixen + stijlkleur, 10 doelklanken in `SEQ_T`), berekent de
   gewenste correctie (gelijke luidheid, lege banden niet oppompen, grenzen per gebied: `seqWanted`) en fit een EQ van
