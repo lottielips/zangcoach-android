@@ -29,6 +29,10 @@ eindpoort dicht, worden galm/echo vervangen door verse (`flushTails`) en wordt d
 (`startTimer`) en plant met het scherm uit 1,5 s vooruit; na een hapering slaat hij gemiste stappen over.
 
 ## Versies
+- **3.4** – Songmodus (Mix & opname): delen in een volgorde (`P.song`, `P.songLoop`), deel na deel afspelen met fill
+  vóór een wissel (`songStep` in de planner), stopt vanzelf aan het einde (`S.songEnd`), en het hele nummer in één keer
+  opnemen. Fout uit 3.3 opgelost: nieuw deel maken/wisselen liep vast bij oudere nummers (`clone(undefined)`; standaard
+  voor `ext` en `twin`).
 - **3.3** – Per vakje toonhoogte/lengte en glijdende roffels (`P.dstn`, `P.dsln`, `P.drgl`), variatie per drumrij (`P.dvar`).
   Akkoordkleur 7/9/11-13 met jazzvoicings (`P.ext`), 808 glijdt bij Legato. Zangeffecten: andere stem (formanten via PSOLA),
   oefenversterker, gitaarversterker, omgekeerde echo, beweging links-rechts. Twee verweven gitaren (`P.twin`).

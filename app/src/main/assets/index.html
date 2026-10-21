@@ -267,6 +267,11 @@ input[type=range]{width:100%;accent-color:var(--amber)}
 .vwave p{position:absolute;inset:0;display:grid;place-items:center;margin:0;font-size:13px;color:var(--muted);text-align:center;padding:0 12px}
 .vinfo b{color:var(--ink)}
 #lyrText{width:100%;box-sizing:border-box;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px;font:inherit;color:inherit;resize:vertical}
+.songstrip{display:flex;flex-wrap:wrap;gap:6px;min-height:34px;align-items:center}
+.songstrip button{border:1px solid var(--pc);background:color-mix(in srgb,var(--pc) 22%,var(--panel2));border-radius:8px;padding:6px 10px;font:600 13px inherit;color:inherit}
+.songstrip button.cur{outline:2px solid var(--good);outline-offset:1px}
+.songstrip button.done{opacity:.55}
+.songstrip .arrow{color:var(--muted);font-size:12px}
 .cutout{display:flex;flex-direction:column;gap:6px;margin-top:10px}
 .cutout button{text-align:left;background:var(--panel2);border:1px dashed var(--line);border-radius:8px;padding:8px 10px;font:inherit;color:inherit}
 .cutout button.kept{border-style:solid;border-color:var(--good);opacity:.6}
@@ -704,6 +709,23 @@ input[type=range]{width:100%;accent-color:var(--amber)}
         <select id="meqPre" aria-label="Voorinstelling"><option value="">Voorinstelling…</option></select></div>
       <div id="meqBox" class="fields"></div>
       <p class="hint">Meer of minder van een stuk van het geluid: sub is wat je voelt, lucht is het glinsteren bovenaan. Dubbeltik op een EQ-schuif van een spoor zet hem terug op 0. Elk spoor heeft ook een eigen EQ (Mix &amp; opname → ▾ Klank &amp; EQ).</p>
+    </section>
+    <section class="card" id="songCard">
+      <div class="row" style="margin-bottom:10px"><h2 class="label" style="margin:0">Nummer (songmodus)</h2><span class="spacer"></span><span id="songLen" class="muted mono"></span></div>
+      <div id="songStrip" class="songstrip"></div>
+      <div class="row" style="margin-top:10px"><span class="muted" style="font-size:12px">Toevoegen:</span><div id="songAdd" class="chips" style="margin:0"></div></div>
+      <div class="row" style="margin-top:12px">
+        <button id="songPlay" class="btn primary" type="button">▶ Speel het nummer</button>
+        <button id="songRec" class="btn rec" type="button">● Neem het hele nummer op</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <label><input type="checkbox" id="songLoop"> Herhalen</label>
+        <span class="spacer"></span>
+        <button id="songAll" class="btn sm" type="button">Alle delen na elkaar</button>
+        <button id="songUndo" class="btn sm" type="button">Laatste weg</button>
+        <button id="songClear" class="btn sm" type="button">Wis</button>
+      </div>
+      <p class="hint">Zet je delen in de volgorde van je nummer, bijvoorbeeld Intro, Couplet, Refrein, Couplet, Refrein, Outro. Elk blokje speelt zijn deel één keer helemaal, met de melodievolgorde erbij. Tik op een blokje om het weg te halen. Bij "Neem het hele nummer op" stopt de opname vanzelf aan het einde; je vindt ze hieronder bij Opnemen.</p>
     </section>
     <section class="card">
       <h2 class="label">Opnemen</h2>
@@ -1454,7 +1476,7 @@ const SCENES=[
 
 const $=id=>document.getElementById(id);
 const mf=m=>440*Math.pow(2,(m-69)/12);
-const clone=o=>JSON.parse(JSON.stringify(o));
+const clone=o=>o===undefined?undefined:JSON.parse(JSON.stringify(o)); // undefined blijft undefined (JSON kan dat niet)
 const rnd=n=>Math.floor(Math.random()*n);
 
 function emptyDrums(){const d={};DRUMS.forEach(x=>d[x.id]=new Array(MAXS).fill(0));return d;}
@@ -1463,12 +1485,12 @@ function defaultProject(){
     v:3,bpm:90,swing:0,ts:'4/4',bars:1,glitch:0,metro:false,
     drums:emptyDrums(),dmute:{},kit:{},dprob:{},drat:{},dtune:{},ddec:{},dvol:{},dpan:{},drev:{},dsl:{},dslc:{},dstn:{},dsln:{},drgl:{},dvar:{},fill:true,
     mel:{A:{notes:[],inst:'ondes',oct:4,len:2,follow:false,vars:[[]],seq:[0],ed:0},B:{notes:[],inst:'sub',oct:2,len:4,follow:true,vars:[[]],seq:[0],ed:0}},
-    prog:0,sev:false,rhythm:'pad',chordInst:'auto',chordFeel:40,change:'bar',
+    prog:0,sev:false,ext:0,twin:false,rhythm:'pad',chordInst:'auto',chordFeel:40,change:'bar',
     mix:{drums:{v:.8,m:false,r:.1,d:0},chords:{v:.7,m:false,r:.3,d:0},A:{v:.8,m:false,r:.35,d:.2},B:{v:.8,m:false,r:0,d:0},V:{v:.9,m:false,r:.2,d:0}},
     vocs:[defaultTrack(1)],
     master:{v:.8,filter:100,lofi:0,dly:3,fb:35,vinyl:0},color:{A:'normaal',B:'normaal',chords:'normaal'},
     key:{mode:'auto',tonic:9,m:'minor'},scene:-1,
-    parts:[{id:1,name:'Couplet',data:null}],cur:0,switchAt:'end',lyrics:'',flow:[]
+    parts:[{id:1,name:'Couplet',data:null}],cur:0,switchAt:'end',lyrics:'',flow:[],song:[],songLoop:false
   };
 }
 let P=defaultProject();
@@ -1503,7 +1525,7 @@ function fixProject(p){
   if(!RHYTHMS.some(r=>r.id===o.rhythm))o.rhythm='pad';
   o.dmute=o.dmute||{};
   o.kit=o.kit||{};
-  o.dprob=o.dprob||{};o.drat=o.drat||{};o.dtune=o.dtune||{};o.ddec=o.ddec||{};o.dvol=o.dvol||{};o.dpan=o.dpan||{};o.drev=o.drev||{};o.dsl=o.dsl||{};o.dslc=o.dslc||{};o.dstn=o.dstn||{};o.dsln=o.dsln||{};o.drgl=o.drgl||{};o.dvar=o.dvar||{};if(typeof o.lyrics!=='string')o.lyrics='';if(!Array.isArray(o.flow))o.flow=[];if(o.fill===undefined)o.fill=true;
+  o.dprob=o.dprob||{};o.drat=o.drat||{};o.dtune=o.dtune||{};o.ddec=o.ddec||{};o.dvol=o.dvol||{};o.dpan=o.dpan||{};o.drev=o.drev||{};o.dsl=o.dsl||{};o.dslc=o.dslc||{};o.dstn=o.dstn||{};o.dsln=o.dsln||{};o.drgl=o.drgl||{};o.dvar=o.dvar||{};if(o.ext==null)o.ext=o.sev?7:0;o.twin=!!o.twin;if(typeof o.lyrics!=='string')o.lyrics='';if(!Array.isArray(o.song))o.song=[];if(!Array.isArray(o.flow))o.flow=[];if(o.fill===undefined)o.fill=true;
   o.color=Object.assign({A:'normaal',B:'normaal',chords:'normaal'},o.color||{});
   // vanaf v3 staat er een snelle start vooraan: de gemarkeerde start één plek opschuiven
   if(p&&(p.v||2)<3&&o.scene>=0)o.scene++;
@@ -2041,7 +2063,9 @@ function noteAt(tr,s,r){
 /* ---------- sequencer ---------- */
 function playStep(abs,t0,sd,spb){
   // wissel van deel: alleen op een mooi moment (einde patroon of einde maat), zodat het in de maat blijft
-  if(S.queued!=null){
+  if(S.songEnd!=null)return; // het nummer is af: niets meer plannen
+  if(S.songRun)songStep(abs,t0);
+  if(S.queued!=null&&!S.songRun){
     const l0=abs-S.partStart;
     if(l0%(patLen()*seqMax())===0||(P.switchAt==='bar'&&l0%barSteps()===0)){doSwitch(S.queued,true);S.partStart=abs;S.arpN=0;}
   }
@@ -2160,7 +2184,7 @@ function play(){
 function stop(){
   if(!S.playing) return;
   try{window.ZangcoachApp&&window.ZangcoachApp.playing&&window.ZangcoachApp.playing(false);}catch(e){}
-  stopTimer();S.playing=false;S.stopTok=(S.stopTok||0)+1;S.ctxTouch=performance.now();
+  stopTimer();S.playing=false;S.stopTok=(S.stopTok||0)+1;S.songRun=false;S.songEnd=null;S.ctxTouch=performance.now();
   const gs=S.gates,now=S.ctx.currentTime;
   for(const b in gs){gs[b].gain.setTargetAtTime(0,now,0.06);}
   if(S.vinylG)S.vinylG.gain.setTargetAtTime(0,now,0.08);
@@ -2980,6 +3004,7 @@ function doSwitch(i,fromSched){
   preloadKit();preloadInst();applyMix();save();renderFlow();if(S.cedit){S.cedit=null;renderCell();}
 }
 function selectPart(i){
+  if(S.songRun){S.songRun=false;S.queued=null;renderSong();msg('Songmodus gepauzeerd: je koos zelf een deel. Druk op ▶ Speel het nummer om opnieuw van voor af te beginnen.');}
   if(S.playing){
     if(i===P.cur){S.queued=null;}
     else S.queued=(S.queued===i?null:i);
@@ -3008,6 +3033,7 @@ function renderParts(){
     box.appendChild(b);
   });
   renderTransport();
+  if(typeof renderSong==='function')renderSong();
 }
 function closePartPanel(){$('partPanel').hidden=true;$('partPanel').innerHTML='';S.panel=null;}
 function openAddPanel(){
@@ -3065,11 +3091,11 @@ function esc(t){return String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','
 /* ---------- kans per stap en fills ---------- */
 function ratAt(id,s){const a=P.drat&&P.drat[id];return a&&a[s]>1?a[s]:1;}
 function probAt(id,s){const a=P.dprob&&P.dprob[id];return a&&a[s]?a[s]:100;}
-function fillLen(){return P.switchAt==='bar'?4:Math.min(8,Math.floor(barSteps()/2));}
+function fillLen(){return P.switchAt==='bar'&&!S.songRun?4:Math.min(8,Math.floor(barSteps()/2));}
 // geeft de positie binnen de fill terug, of -1 als er nu geen fill hoort
 function fillAt(pos,step){
   if(S.queued==null||P.fill===false||!S.playing)return -1;
-  const SL=patLen()*seqMax(),L=fillLen(),end=P.switchAt==='bar'?barSteps():SL,p=P.switchAt==='bar'?pos%barSteps():(step==null?pos:step%SL);
+  const bar=P.switchAt==='bar'&&!S.songRun,SL=patLen()*seqMax(),L=fillLen(),end=bar?barSteps():SL,p=bar?pos%barSteps():(step==null?pos:step%SL);
   return p>=end-L?p-(end-L):-1;
 }
 
@@ -5289,6 +5315,84 @@ function setupText(){
   renderFlow();
 }
 
+
+/* ---------- songmodus: delen in een volgorde, als één nummer ---------- */
+function songList(){return (P.song||[]).filter(id=>P.parts.some(p=>p.id===id));}
+function songIdx(k){const L=songList();return k>=0&&k<L.length?P.parts.findIndex(p=>p.id===L[k]):-1;}
+function partData(i){return i===P.cur?P:(P.parts[i]&&P.parts[i].data)||P;}
+function cycleSteps(d){const ml=t=>t&&Array.isArray(t.seq)&&t.seq.length?t.seq.length:1;return (TS[d.ts]||TS['4/4']).n*(d.bars||1)*Math.max(ml(d.mel&&d.mel.A),ml(d.mel&&d.mel.B));}
+// Vanuit de planner, bij elke stap: aan het einde van een deel het volgende uit de lijst laden.
+function songStep(abs,t0){
+  const l0=abs-S.partStart;
+  if(l0>0&&l0%(patLen()*seqMax())===0){
+    S.songPos++;
+    if(S.songPos>=songList().length){
+      if(P.songLoop)S.songPos=0;
+      else{S.songEnd=t0;S.songRun=false;S.queued=null;S.songDone=true;return;}
+    }
+    const i=songIdx(S.songPos);
+    if(i>=0&&i!==P.cur)doSwitch(i,true);
+    S.partStart=abs;S.arpN=0;S.songDirty=true;
+  }
+  // volgende deel klaarzetten: dan komt de drumroffel (fill) vlak voor een echte wissel
+  const L=songList(),nk=S.songPos+1<L.length?S.songPos+1:(P.songLoop?0:-1),nx=songIdx(nk);
+  S.queued=nx>=0&&nx!==P.cur?nx:null;
+  if(S.songDirty){S.songDirty=false;setTimeout(renderSong,0);}
+}
+function songPlay(rec){
+  const L=songList();
+  if(!L.length){msg('Zet eerst een paar delen in de volgorde van je nummer (Toevoegen).',true);return;}
+  if(S.playing)stop();
+  if(S.rec)stopRec();
+  const i=songIdx(0);if(i!==P.cur)doSwitch(i,false);
+  S.songPos=0;S.songEnd=null;S.songRun=true;S.songRec=!!rec;S.songDone=false;
+  if(rec)startRec();else play();
+  renderSong();
+  msg(rec?'Het hele nummer wordt opgenomen. De opname stopt vanzelf aan het einde.':'Je nummer speelt, deel na deel.');
+}
+function finishSong(){
+  const rec=S.songRec;S.songEnd=null;S.songRec=false;
+  stop();renderSong();
+  msg(rec?'Klaar: het hele nummer staat bij Opnemen (hieronder). Sla het op als MP3 of deel het.':'Einde van je nummer.');
+}
+function songSecs(){
+  const sd=60/P.bpm/4;let st=0;
+  for(const id of songList()){const i=P.parts.findIndex(p=>p.id===id);st+=cycleSteps(partData(i));}
+  return {steps:st,secs:st*sd};
+}
+function renderSong(){
+  const strip=$('songStrip');if(!strip)return;
+  const L=songList();strip.innerHTML='';
+  if(!L.length)strip.innerHTML='<span class="muted" style="font-size:13px">Nog leeg. Tik hieronder op de delen in de volgorde van je nummer.</span>';
+  L.forEach((id,k)=>{
+    const i=P.parts.findIndex(p=>p.id===id);
+    if(k>0){const a=document.createElement('span');a.className='arrow';a.textContent='→';strip.appendChild(a);}
+    const b=document.createElement('button');b.type='button';b.textContent=P.parts[i].name;b.style.setProperty('--pc',partCol(i));
+    if(S.songRun&&k===S.songPos)b.classList.add('cur');else if(S.songRun&&k<S.songPos)b.classList.add('done');
+    b.title='Tik om weg te halen';
+    b.onclick=()=>{if(S.songRun){msg('Stop eerst het nummer om de volgorde te veranderen.');return;}const pos=(P.song||[]).indexOf(id,0);let n=-1,j=-1;for(let q=0;q<P.song.length;q++){if(P.parts.some(p=>p.id===P.song[q])){n++;if(n===k){j=q;break;}}}if(j>=0){P.song.splice(j,1);save();renderSong();}};
+    strip.appendChild(b);
+  });
+  const add=$('songAdd');add.innerHTML='';
+  P.parts.forEach((pt,i)=>{const c=document.createElement('button');c.type='button';c.className='chip';c.textContent='＋ '+pt.name;c.style.borderColor=partCol(i);
+    c.onclick=()=>{if(S.songRun){msg('Stop eerst het nummer om de volgorde te veranderen.');return;}if(P.song.length>=40)return;P.song.push(pt.id);save();renderSong();};add.appendChild(c);});
+  const T=songSecs(),m=Math.floor(T.secs/60),sec=Math.round(T.secs%60);
+  $('songLen').textContent=L.length?L.length+' blokjes · '+m+':'+String(sec).padStart(2,'0'):'';
+  $('songLoop').checked=!!P.songLoop;
+  $('songPlay').textContent=S.songRun&&!S.songRec?'■ Stop':'▶ Speel het nummer';
+  $('songRec').textContent=S.songRun&&S.songRec?'■ Stop opname':'● Neem het hele nummer op';
+  $('songRec').classList.toggle('on',!!(S.songRun&&S.songRec));
+}
+function setupSong(){
+  $('songPlay').onclick=()=>{if(S.songRun&&!S.songRec){stop();renderSong();return;}songPlay(false);};
+  $('songRec').onclick=()=>{if(S.songRun&&S.songRec){stop();renderSong();msg('Opname gestopt. Ze staat hieronder bij Opnemen.');return;}songPlay(true);};
+  $('songLoop').onchange=e=>{P.songLoop=e.target.checked;save();};
+  $('songAll').onclick=()=>{if(S.songRun)return;P.song=P.parts.map(p=>p.id);save();renderSong();};
+  $('songUndo').onclick=()=>{if(S.songRun)return;P.song.pop();save();renderSong();};
+  $('songClear').onclick=()=>{if(S.songRun)return;P.song=[];save();renderSong();};
+  renderSong();
+}
+
 function tick(ts){
   requestAnimationFrame(tick);
   if(S.playing&&S.ctx){
@@ -5303,6 +5407,7 @@ function tick(ts){
     }
     if(last){markPos(last.pos,last.cpos);markSeq(last.step);flowMark(last.step);const pg=$('partProg'),SL=patLen()*seqMax();if(pg)pg.style.width=(((last.step%SL)+1)/SL*100)+'%';}
   }
+  if(S.songEnd!=null&&S.ctx&&S.ctx.currentTime>=S.songEnd)finishSong();
   if(S.hum&&S.ctx)humWatch();
   if(S.vrec&&S.ctx)vrecWatch();
   if(S.tab==='voc')vocHead();
@@ -5332,7 +5437,7 @@ function showTab(t){
   document.querySelectorAll('.tab').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.tab===t)));
   document.querySelectorAll('.page').forEach(p=>p.hidden=p.id!=='page-'+t);
   if(t==='voc'){renderVoc();renderFlow();requestAnimationFrame(drawVoc);}
-  if(t==='mix'){renderMixer();renderMasterEQ();}
+  if(t==='mix'){renderMixer();renderMasterEQ();renderSong();}
   if(t==='beat'){renderDrumMix();renderRack($('drumRack'),'drums');fillSmpFrom();requestAnimationFrame(drawSmp);}
   if(t==='mel'||t==='chords'){renderRack($('melRack'),S.track);renderRack($('chordRack'),'chords');}
 }
@@ -5443,7 +5548,7 @@ function init(){
   $('feel').oninput=e=>{P.mel[S.track].feel=+e.target.value;$('feelVal').textContent=e.target.value;save();};
   $('glideCb').onchange=e=>{P.mel[S.track].glide=e.target.checked;save();};
   $('humBtn').onclick=toggleHum;
-  setupVoc();setupVars();setupBackup();setupSampler();setupIdle();setupCells();setupText();
+  setupVoc();setupVars();setupBackup();setupSampler();setupIdle();setupCells();setupText();setupSong();
   $('humNudge').oninput=e=>nudgeHum(+e.target.value);
   $('melRand').onclick=randomMel;
   $('melClear').onclick=()=>{pushUndo();P.mel[S.track].notes=[];save();renderMelGrid();msg((S.track==='A'?'Melodie':'Bas')+' gewist. ↶ zet hem terug.');};
