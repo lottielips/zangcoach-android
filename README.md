@@ -20,6 +20,8 @@ anders kan de APK niet over de oude app geïnstalleerd worden.
 versionCode moet altijd hoger zijn dan de vorige (oude app eindigde op 17).
 
 ## Versies
+- **3.1.1** – Geen ruis meer na de sampler: de microfoon gaat na een sampler-opname weer uit; de geluidsmotor
+  gaat na 10 s zonder klank stil (`ctxSleep`, wakker bij de volgende tik); op de achtergrond zonder muziek: microfoon los en stil.
 - **3.1** – Sampler (tabblad Beat): eigen geluiden uit een bestand, de microfoon, een zangopname of een mix-opname;
   in plakjes hakken (op de slagen of gelijk), omgekeerd, begin/einde. Plakjes spelen op een drumrij
   (`P.kit[rij]='u:<id>'`, plakje per vakje in `P.dslc`, standaard in `P.dsl`). Geluiden in IndexedDB

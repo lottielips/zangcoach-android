@@ -1533,7 +1533,8 @@ function makeLimiter(c,thr){
   return {connect:d=>sc.connect(d),input:l};
 }
 function ensureCtx(){
-  if(S.ctx) return;
+  S.ctxTouch=performance.now();
+  if(S.ctx){if(S.ctx.state==='suspended'&&S.idleSusp){S.idleSusp=false;S.ctx.resume();}return;}
   const C=window.AudioContext||window.webkitAudioContext;
   let c;try{c=new C({latencyHint:'balanced'});}catch(e){c=new C();}
   S.ctx=c;
@@ -2088,6 +2089,7 @@ function stop(){
   if(S.hum)cancelHum('Inneuriën afgebroken omdat de muziek stopte. Er is niets veranderd.');
   if(S.vrec)cancelVocRec('Zangopname afgebroken omdat de muziek stopte. Je vorige zang is niet veranderd.');
   vocStopAll(now);
+  if(S.schoke){for(const r in S.schoke){try{S.schoke[r].g.gain.setTargetAtTime(0,now,0.02);}catch(e){}}S.schoke={};}
   if(S.rec)stopRec();
   renderPlay();markChord(-1);markPos(-1,-1);markSeq(-1);renderKey();const pg=$('partProg');if(pg)pg.style.width='0';
 }
@@ -4634,6 +4636,7 @@ function smpAudition(id,k){
   const t=S.ctx.currentTime+0.01,src=S.ctx.createBufferSource(),g=S.ctx.createGain();
   src.buffer=info.buf;g.gain.value=SGAIN;src.connect(g);g.connect(S.bus.drums.in);
   src.start(t,info.off,info.dur);S.splay=src;
+  S.ctxTouch=performance.now()+info.dur*1000; // lang beluisteren niet laten stilleggen
   S.shl={k,until:performance.now()+info.dur*1000};drawSmp();setTimeout(drawSmp,info.dur*1000+30);
 }
 
@@ -4657,7 +4660,7 @@ async function smpAdd(x,sr,name){
   await smpEnsure(id).catch(()=>{});
   renderSampler();if(S.pick)renderPick();
   const nn=smpCount(id);
-  msg('"'+meta.name+'" staat in de sampler: '+nn+' plakjes'+(cut?' (ingekort tot '+SLEN+' seconden)':'')+'. Tik op de golfvorm om ze te horen.');
+  msg('"'+meta.name+'" staat in de sampler: '+nn+(nn===1?' plakje':' plakjes')+(cut?' (ingekort tot '+SLEN+' seconden)':'')+'. Tik op de golfvorm om ze te horen.');
 }
 function toMono(buf){
   const n=buf.length,x=new Float32Array(n),ch=buf.numberOfChannels;
@@ -4675,8 +4678,9 @@ async function smpFromBlob(blob,name){
 async function smpRecToggle(){
   if(S.srec){S.srec.stop();return;}
   if(typeof MediaRecorder==='undefined'){msg('Opnemen werkt niet in deze browser.',true);return;}
+  S.smicOwn=!S.stream;
   if(!S.stream)await startMic();
-  if(!S.stream)return;
+  if(!S.stream){S.smicOwn=false;return;}
   const types=['audio/webm;codecs=opus','audio/webm','audio/mp4','audio/ogg'];
   const type=types.find(t=>MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported(t))||'';
   let mr;try{mr=type?new MediaRecorder(S.stream,{mimeType:type}):new MediaRecorder(S.stream);}catch(e){msg('Opnemen werkt niet in deze browser.',true);return;}
@@ -4684,6 +4688,9 @@ async function smpRecToggle(){
   mr.ondataavailable=e=>{if(e.data&&e.data.size)chunks.push(e.data);};
   mr.onstop=()=>{
     clearTimeout(S.srecT);S.srec=null;renderSmpRecBtn();
+    // de microfoon stond alleen aan voor deze opname: meteen weer los laten
+    if(S.smicOwn&&S.stream&&!S.vrec&&!S.hum&&!S.rec)stopMic();
+    S.smicOwn=false;
     const n=smpList().filter(m=>/^Opname \d+$/.test(m.name)).length+1;
     smpFromBlob(new Blob(chunks,{type:mr.mimeType||type}),'Opname '+n);
   };
@@ -4792,7 +4799,7 @@ function renderSmpInfo(){
   const L=m.len/m.sr,f=v=>(v*L).toFixed(2).replace('.',',')+' s';
   $('smpStV').textContent=f(m.st);$('smpEnV').textContent=f(m.en);
   const rows=DRUMS.filter(d=>smpOfRow(d.id)===m.id).map(d=>d.n);
-  $('smpInfo').innerHTML='<b>'+smpCount(m.id)+' plakjes</b> · '+L.toFixed(1).replace('.',',')+' s'+(rows.length?' · speelt op '+rows.join(', '):' · nog op geen enkele drumrij');
+  $('smpInfo').innerHTML='<b>'+smpCount(m.id)+(smpCount(m.id)===1?' plakje':' plakjes')+'</b> · '+L.toFixed(1).replace('.',',')+' s'+(rows.length?' · speelt op '+rows.join(', '):' · nog op geen enkele drumrij');
 }
 function drawSmp(){
   const cv=$('smpCanvas');if(!cv||S.tab!=='beat')return;
@@ -4903,6 +4910,28 @@ function smpPickSection(box,row,ch){
   ch.after(div);
 }
 
+
+/* ---------- geluidsmotor stilleggen als er niets gebeurt ---------- */
+// Een open geluidsstroom kan op sommige toestellen en koptelefoons ruisen, ook als er niets klinkt,
+// en kost batterij. Na 10 seconden zonder klank (en zonder microfoon of opname) gaat hij stil;
+// de volgende tik of klank maakt hem meteen weer wakker.
+function ctxBusy(){return !!(S.playing||S.stream||S.rec||S.srec||S.drone||S.hum||S.vrec);}
+function ctxSleep(){
+  const c=S.ctx;if(!c||c.state!=='running'||ctxBusy())return;
+  S.idleSusp=true;c.suspend().catch(()=>{S.idleSusp=false;});
+}
+function setupIdle(){
+  setInterval(()=>{if(ctxBusy())S.ctxTouch=performance.now();else if(performance.now()-(S.ctxTouch||0)>10000)ctxSleep();},2000);
+  const wake=()=>{if(S.ctx&&S.ctx.state==='suspended'&&S.idleSusp){S.idleSusp=false;S.ctxTouch=performance.now();S.ctx.resume();}};
+  document.addEventListener('pointerdown',wake,true);document.addEventListener('keydown',wake,true);
+  document.addEventListener('visibilitychange',()=>{
+    if(document.hidden){
+      if(S.srec)S.srec.stop();
+      // naar de achtergrond terwijl er niets speelt: microfoon los en alles stil
+      if(!S.playing&&!S.rec&&!S.vrec&&!S.hum){if(S.stream)stopMic();ctxSleep();}
+    }else wake();
+  });
+}
 function tick(ts){
   requestAnimationFrame(tick);
   if(S.playing&&S.ctx){
@@ -5053,7 +5082,7 @@ function init(){
   $('feel').oninput=e=>{P.mel[S.track].feel=+e.target.value;$('feelVal').textContent=e.target.value;save();};
   $('glideCb').onchange=e=>{P.mel[S.track].glide=e.target.checked;save();};
   $('humBtn').onclick=toggleHum;
-  setupVoc();setupVars();setupBackup();setupSampler();
+  setupVoc();setupVars();setupBackup();setupSampler();setupIdle();
   $('humNudge').oninput=e=>nudgeHum(+e.target.value);
   $('melRand').onclick=randomMel;
   $('melClear').onclick=()=>{pushUndo();P.mel[S.track].notes=[];save();renderMelGrid();msg((S.track==='A'?'Melodie':'Bas')+' gewist. ↶ zet hem terug.');};
