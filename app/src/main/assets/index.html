@@ -184,6 +184,7 @@ select{background:var(--panel2);border:1px solid var(--line);border-radius:8px;p
 .cell.v2{background:var(--c,var(--amber));border-color:var(--c,var(--amber))}
 .cell.v1{background:color-mix(in srgb,var(--c,var(--amber)) 45%,var(--panel2));border-color:var(--c,var(--amber))}
 .cell.now{outline:2px solid var(--good);outline-offset:0}
+.cell.sel{outline:2px solid var(--ink);outline-offset:1px;z-index:1}
 .cell.gs{margin-left:4px}
 .mgrid .cell{height:22px;border-radius:3px}
 .mgrid .cell.rowroot{background:color-mix(in srgb,var(--amber) 10%,var(--panel2))}
@@ -265,6 +266,18 @@ input[type=range]{width:100%;accent-color:var(--amber)}
 #smpName{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-weight:600;min-width:0;flex:1 1 140px;max-width:260px;color:inherit}
 .vwave p{position:absolute;inset:0;display:grid;place-items:center;margin:0;font-size:13px;color:var(--muted);text-align:center;padding:0 12px}
 .vinfo b{color:var(--ink)}
+#lyrText{width:100%;box-sizing:border-box;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px;font:inherit;color:inherit;resize:vertical}
+.cutout{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+.cutout button{text-align:left;background:var(--panel2);border:1px dashed var(--line);border-radius:8px;padding:8px 10px;font:inherit;color:inherit}
+.cutout button.kept{border-style:solid;border-color:var(--good);opacity:.6}
+.frow{margin-top:10px}
+.frow input{width:100%;box-sizing:border-box;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:7px 10px;font:inherit;color:inherit}
+.fgrid{display:grid;gap:2px;margin-top:4px}
+.fgrid i{font-style:normal;font:600 9px var(--f-mono);letter-spacing:-.4px;height:24px;display:grid;place-items:center;border-radius:4px;background:var(--panel2);border:1px solid var(--line);overflow:hidden;white-space:nowrap}
+.fgrid i.beat{border-color:var(--muted)}
+.fgrid i.on{background:var(--amber-soft);border-color:var(--amber)}
+.fgrid i.now{outline:2px solid var(--good)}
+.fgrid i.rest{color:var(--muted)}
 .vinfo .warn{color:var(--warn)}
 .vars{display:flex;flex-direction:column;gap:8px;margin-bottom:12px;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--panel2)}
 .vlab{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);font-weight:600;min-width:74px}
@@ -399,6 +412,7 @@ input[type=range]{width:100%;accent-color:var(--amber)}
         <button id="probBtn" class="btn sm" type="button" aria-pressed="false">% Kans</button>
         <button id="ratBtn" class="btn sm" type="button" aria-pressed="false">⁂ Roffel</button>
         <button id="sliceBtn" class="btn sm" type="button" aria-pressed="false">✂ Plakje</button>
+        <button id="cellBtn" class="btn sm" type="button" aria-pressed="false">🎚 Per vakje</button>
         <button id="drumRand" class="btn sm" type="button">🎲 Verras me</button>
         <button class="btn sm undoBtn" type="button" aria-label="Ongedaan maken">↶</button>
         <button id="drumClear" class="btn sm" type="button">Wis</button>
@@ -406,7 +420,8 @@ input[type=range]{width:100%;accent-color:var(--amber)}
       <div class="f" style="margin-bottom:12px"><span>Drumkit (alles in één keer)</span><select id="kitSel" aria-label="Drumkit"></select></div>
       <div class="gridwrap"><div id="drumGrid" class="sgrid"></div></div>
       <div id="soundPick" class="pick" hidden></div>
-      <div class="legend"><span><i style="background:var(--amber)"></i>hard</span><span><i style="background:var(--amber-soft)"></i>zacht</span><span style="display:block">Tik: uit → hard → zacht → uit. Tik op een naam (bv. Kick) om een andere klank te kiezen of te dempen. Met <b>% Kans</b> aan tik je op een gevuld vakje om te kiezen hoe vaak het speelt (100, 75, 50 of 25%). Met <b>⁂ Roffel</b> aan wordt één vakje 2, 3 of 4 snelle slagen: typisch voor glitch en trap. Met <b>✂ Plakje</b> aan kies je per vakje welk plakje van je sample speelt (het cijfer in het vakje).</span></div>
+      <div id="cellEdit" class="pick" hidden></div>
+      <div class="legend"><span><i style="background:var(--amber)"></i>hard</span><span><i style="background:var(--amber-soft)"></i>zacht</span><span style="display:block">Tik: uit → hard → zacht → uit. Tik op een naam (bv. Kick) om een andere klank te kiezen of te dempen. Met <b>% Kans</b> aan tik je op een gevuld vakje om te kiezen hoe vaak het speelt (100, 75, 50 of 25%). Met <b>⁂ Roffel</b> aan wordt één vakje 2, 3 of 4 snelle slagen: typisch voor glitch en trap. Met <b>✂ Plakje</b> aan kies je per vakje welk plakje van je sample speelt (het cijfer in het vakje). Met <b>🎚 Per vakje</b> aan tik je op een gevuld vakje om alleen die slag hoger, lager of korter te maken, of een roffel te laten glijden.</span></div>
     </section>
 
     <section class="card" id="smpCard">
@@ -582,6 +597,11 @@ input[type=range]{width:100%;accent-color:var(--amber)}
       <h2 class="label">Effect</h2>
       <div id="vocFx" class="chips" style="margin-top:0"></div>
       <div id="vocDownBox" class="f" style="margin-top:6px" hidden><span>Hoeveel lager: <b id="vocDownVal" class="mono">5</b> halve tonen</span><input type="range" id="vocDown" min="1" max="12" step="1" value="5"></div>
+      <div id="vocKarBox" class="fields" style="margin-top:6px" hidden>
+        <div class="f"><span>Toonhoogte: <b id="vocKpVal" class="mono">-5</b> halve tonen</span><input type="range" id="vocKp" min="-12" max="12" step="1" value="-5"></div>
+        <div class="f"><span>Klankkleur: <b id="vocFormVal" class="mono">-3</b> (− groter, + kleiner)</span><input type="range" id="vocForm" min="-8" max="8" step="1" value="-3"></div>
+      </div>
+      <div class="f" style="margin-top:12px"><span>Beweging links-rechts: <b id="vocMoveVal" class="mono">0%</b></span><input type="range" id="vocMove" min="0" max="100" step="5" value="0"></div>
       <div class="f" style="margin-top:14px"><span>Toonhoogtecorrectie naar <b id="vocKey">de toonsoort</b></span>
         <div class="seg" role="group" id="vocTune" aria-label="Toonhoogtecorrectie"><button type="button" data-t="uit" aria-pressed="true">Uit</button><button type="button" data-t="zacht" aria-pressed="false">Zacht</button><button type="button" data-t="hard" aria-pressed="false">Hard</button></div></div>
       <p id="vocFxHint" class="hint"></p>
@@ -596,6 +616,26 @@ input[type=range]{width:100%;accent-color:var(--amber)}
       </div>
       <p class="hint">De vertraging van speaker en microfoon trekt de app er al vanzelf af, op dezelfde manier als bij inneuriën.</p>
     </section>
+    <section class="card" id="lyrCard">
+      <h2 class="label">Tekst</h2>
+      <textarea id="lyrText" rows="7" placeholder="Schrijf hier je tekst. Of plak zinnen en woorden die je ergens tegenkwam: in een boek, een krant, een gesprek…"></textarea>
+      <div class="row" style="margin-top:10px">
+        <button id="cutLines" class="btn sm" type="button">✂ Cut-up: zinnen</button>
+        <button id="cutWords" class="btn sm" type="button">✂ Cut-up: woorden</button>
+      </div>
+      <div id="cutOut" class="cutout"></div>
+      <p class="hint">Zo schreef Thom Yorke de teksten van Kid A: zinnen in stukken knippen, door elkaar halen en kijken welke nieuwe combinaties iets doen. Tik op een regel die je goed vindt: die komt onderaan in je tekst. Je tekst geldt voor het hele nummer.</p>
+    </section>
+    <section class="card" id="flowCard">
+      <div class="row" style="margin-bottom:6px"><h2 class="label" style="margin:0">Flow: rappen in de maat</h2><span class="spacer"></span><span class="mixpart" id="flowPart"></span></div>
+      <div id="flowRows"></div>
+      <div class="row" style="margin-top:10px">
+        <button id="flowAdd" class="btn sm" type="button">＋ Regel</button>
+        <button id="flowFromLyr" class="btn sm" type="button">Regels uit je tekst</button>
+        <button id="flowClear" class="btn sm" type="button">Wis</button>
+      </div>
+      <p class="hint">Eén regel is één maat. Zet spaties of streepjes tussen de lettergrepen (bv. "to pimp a but-ter-fly"), een punt is een rust. Hoe meer lettergrepen, hoe sneller: tot 4 per maat op de tellen, tot 8 in achtsten, daarboven in zestienden. Druk op ▶: de lettergreep die je nu moet zeggen, licht op.</p>
+    </section>
   </div>
 
   <!-- ============ AKKOORDEN ============ -->
@@ -608,7 +648,8 @@ input[type=range]{width:100%;accent-color:var(--amber)}
       <p id="rhythmDesc" class="steps-cap"></p>
       <div class="row" style="margin-bottom:14px">
         <button id="droneBtn" class="btn" type="button">Grondtoon aan</button>
-        <label><input type="checkbox" id="sevCb"> Kleurakkoorden (7e)</label>
+        <label><input type="checkbox" id="twinCb"> Twee gitaren (verweven, links en rechts)</label>
+        <label>Akkoordkleur <select id="extSel" aria-label="Akkoordkleur"><option value="0">Gewoon (drieklank)</option><option value="7">Kleur (7e)</option><option value="9">Jazz (9e)</option><option value="13">Neo-soul (11e en 13e)</option></select></label>
       </div>
       <div class="fields">
         <div class="f"><span>Ritme</span><select id="rhythm"></select></div>
@@ -1110,7 +1151,9 @@ const PROGS={
     {n:'Zwevend (lydisch)',c:['I','II','I','IV']},
     {n:'Onrustig',c:['I','bIII','IV','bVI']},
     {n:'Twijfel',c:['I','iii','vi','bVII']},
-    {n:'Canon (8 akkoorden)',c:['I','V','vi','iii','IV','I','IV','V']}
+    {n:'Canon (8 akkoorden)',c:['I','V','vi','iii','IV','I','IV','V']},
+    {n:'Neo-soul (dalend)',c:['IV','iii','ii','I']},
+    {n:'Soul-lus',c:['I','iii','ii','V']}
   ],
   minor:[
     {n:'Donkere pop',c:['i','VI','III','VII']},
@@ -1125,15 +1168,19 @@ const PROGS={
     {n:'Zwevend mineur',c:['i','VI','iv','VII']},
     {n:'Zwevend elektronisch',c:['VI','iv','i','VII']},
     {n:'Frygisch (onheilspellend)',c:['i','bII','i','VII']},
-    {n:'Twee akkoorden',c:['i','VI','i','VI']}
+    {n:'Twee akkoorden',c:['i','VI','i','VI']},
+    {n:'Jazz-rap (mineur)',c:['i','iv','v','iv']},
+    {n:'Donkere soul',c:['i','VI','iv','v']}
   ]
 };
 function chordName(root,q,sev,seventh,k,flat){
-  const n=flat?FLAT[root]:noteName(root,k);
-  if(q==='maj') return n+(sev?(seventh===11?'maj7':'7'):'');
-  if(q==='min') return n+'m'+(sev?'7':'');
-  return n+(sev?'m7♭5':'°');
+  const n=flat?FLAT[root]:noteName(root,k),e=sev===true?7:(+sev||0);
+  if(q==='maj'){if(!e)return n;const t=e>=13?'13':e>=9?'9':'7';return n+(seventh===11?'maj'+t:t);}
+  if(q==='min')return n+'m'+(e>=13?'11':e>=9?'9':e?'7':'');
+  return n+(e>=9?'m11♭5':e?'m7♭5':'°');
 }
+// Akkoordkleur van een nummer of deel: 0 = drieklank, 7, 9 of 13 (oudere nummers: P.sev aan = 7).
+function chordExt(p){return p&&p.ext!=null?+p.ext:(p&&p.sev?7:0);}
 function voice(pcs,prev){
   const n=pcs.length; let best=null,bc=1e9;
   const pm=prev?prev.reduce((a,b)=>a+b,0)/prev.length:62;
@@ -1155,12 +1202,17 @@ function buildChords(key,progIdx,sev){
   let prev=null;
   return prog.c.map(sym=>{
     const d=parseRoman(sym,key.mode); const root=(key.tonic+d.off)%12;
-    const sv=seventhFor(d.off,d.q,key.mode);
+    const sv=seventhFor(d.off,d.q,key.mode),ext=sev===true?7:(+sev||0);
     const ivs=[0,d.q==='maj'?4:3,d.q==='dim'?6:7];
-    if(sev) ivs.push(sv);
-    const pcs=ivs.map(i=>(root+i)%12);
-    const voicing=voice(pcs,prev); prev=voicing;
-    return {sym,root,pcs,voicing,bass:36+root,name:chordName(root,d.q,sev,sv,key,d.flat)};
+    if(ext) ivs.push(d.q==='dim'?10:sv);
+    // jazz: none erbij; neo-soul: 13 (majeur) of 11 (mineur, verminderd)
+    if(ext>=9) ivs.push(d.q==='dim'?17:14);
+    if(ext>=13) ivs.push(d.q==='maj'?21:17);
+    const pcs=[...new Set(ivs.map(i=>(root+i)%12))];
+    // vanaf 9: zonder grondtoon en kwint in de rechterhand (de bas of linkerhand speelt de grondtoon), zoals een jazzpianist
+    const up=ext>=9?[...new Set(ivs.filter(i=>i!==0&&i!==7).map(i=>(root+i)%12))]:pcs;
+    const voicing=voice(up,prev); prev=voicing;
+    return {sym,root,pcs,voicing,bass:36+root,ext,iv:ivs,name:chordName(root,d.q,ext,sv,key,d.flat)};
   });
 }
 function arpSeq(v){return v.concat(v.slice(1,-1).reverse());}
@@ -1409,14 +1461,14 @@ function emptyDrums(){const d={};DRUMS.forEach(x=>d[x.id]=new Array(MAXS).fill(0
 function defaultProject(){
   return {
     v:3,bpm:90,swing:0,ts:'4/4',bars:1,glitch:0,metro:false,
-    drums:emptyDrums(),dmute:{},kit:{},dprob:{},drat:{},dtune:{},ddec:{},dvol:{},dpan:{},drev:{},dsl:{},dslc:{},fill:true,
+    drums:emptyDrums(),dmute:{},kit:{},dprob:{},drat:{},dtune:{},ddec:{},dvol:{},dpan:{},drev:{},dsl:{},dslc:{},dstn:{},dsln:{},drgl:{},dvar:{},fill:true,
     mel:{A:{notes:[],inst:'ondes',oct:4,len:2,follow:false,vars:[[]],seq:[0],ed:0},B:{notes:[],inst:'sub',oct:2,len:4,follow:true,vars:[[]],seq:[0],ed:0}},
     prog:0,sev:false,rhythm:'pad',chordInst:'auto',chordFeel:40,change:'bar',
     mix:{drums:{v:.8,m:false,r:.1,d:0},chords:{v:.7,m:false,r:.3,d:0},A:{v:.8,m:false,r:.35,d:.2},B:{v:.8,m:false,r:0,d:0},V:{v:.9,m:false,r:.2,d:0}},
     vocs:[defaultTrack(1)],
     master:{v:.8,filter:100,lofi:0,dly:3,fb:35,vinyl:0},color:{A:'normaal',B:'normaal',chords:'normaal'},
     key:{mode:'auto',tonic:9,m:'minor'},scene:-1,
-    parts:[{id:1,name:'Couplet',data:null}],cur:0,switchAt:'end'
+    parts:[{id:1,name:'Couplet',data:null}],cur:0,switchAt:'end',lyrics:'',flow:[]
   };
 }
 let P=defaultProject();
@@ -1451,7 +1503,7 @@ function fixProject(p){
   if(!RHYTHMS.some(r=>r.id===o.rhythm))o.rhythm='pad';
   o.dmute=o.dmute||{};
   o.kit=o.kit||{};
-  o.dprob=o.dprob||{};o.drat=o.drat||{};o.dtune=o.dtune||{};o.ddec=o.ddec||{};o.dvol=o.dvol||{};o.dpan=o.dpan||{};o.drev=o.drev||{};o.dsl=o.dsl||{};o.dslc=o.dslc||{};if(o.fill===undefined)o.fill=true;
+  o.dprob=o.dprob||{};o.drat=o.drat||{};o.dtune=o.dtune||{};o.ddec=o.ddec||{};o.dvol=o.dvol||{};o.dpan=o.dpan||{};o.drev=o.drev||{};o.dsl=o.dsl||{};o.dslc=o.dslc||{};o.dstn=o.dstn||{};o.dsln=o.dsln||{};o.drgl=o.drgl||{};o.dvar=o.dvar||{};if(typeof o.lyrics!=='string')o.lyrics='';if(!Array.isArray(o.flow))o.flow=[];if(o.fill===undefined)o.fill=true;
   o.color=Object.assign({A:'normaal',B:'normaal',chords:'normaal'},o.color||{});
   // vanaf v3 staat er een snelle start vooraan: de gemarkeerde start één plek opschuiven
   if(p&&(p.v||2)<3&&o.scene>=0)o.scene++;
@@ -1469,10 +1521,10 @@ function load(){
   S.loadOk=false;
   try{const j=localStorage.getItem(STORE);if(j)P=fixProject(JSON.parse(j));S.loadOk=true;}catch(e){}
 }
-function pushUndo(){syncMel(P.mel);S.undo.push(JSON.stringify({drums:P.drums,mel:P.mel,dprob:P.dprob,drat:P.drat,dslc:P.dslc}));if(S.undo.length>60)S.undo.shift();}
+function pushUndo(){syncMel(P.mel);S.undo.push(JSON.stringify({drums:P.drums,mel:P.mel,dprob:P.dprob,drat:P.drat,dslc:P.dslc,dstn:P.dstn,dsln:P.dsln,drgl:P.drgl}));if(S.undo.length>60)S.undo.shift();}
 function undo(){
   const u=S.undo.pop();if(!u){msg('Niets om ongedaan te maken.');return;}
-  const o=JSON.parse(u);P.drums=o.drums;P.mel=o.mel;if(o.dprob)P.dprob=o.dprob;if(o.drat)P.drat=o.drat;if(o.dslc)P.dslc=o.dslc;save();renderDrumGrid();renderMel();
+  const o=JSON.parse(u);P.drums=o.drums;P.mel=o.mel;if(o.dprob)P.dprob=o.dprob;if(o.drat)P.drat=o.drat;if(o.dslc)P.dslc=o.dslc;if(o.dstn)P.dstn=o.dstn;if(o.dsln)P.dsln=o.dsln;if(o.drgl)P.drgl=o.drgl;save();renderDrumGrid();renderMel();
 }
 
 function msg(t,err){const m=$('msg');m.textContent=t||'';m.className=err?'err':'';}
@@ -1842,7 +1894,9 @@ function synth(inst,midi,t,dur,vel,out,opt){
     // 808-bas: sinus met korte val in toonhoogte, lange staart, beetje vervorming voor de gsm-speaker
     const o=osc('sine',fr),sh=c.createWaveShaper(),cv=new Float32Array(1024);
     for(let i=0;i<1024;i++){const x=i/1023*2-1;cv[i]=Math.tanh(x*2.2)/Math.tanh(2.2);}sh.curve=cv;
-    o.frequency.setValueAtTime(fr*2.2,t);o.frequency.exponentialRampToValueAtTime(fr,t+0.05);
+    // aansluitende noot (Legato): van de vorige toon naar deze glijden, zoals een 808 in trap en hiphop
+    if(opt&&opt.from!=null&&opt.from!==midi){o.frequency.setValueAtTime(mf(opt.from),t);o.frequency.exponentialRampToValueAtTime(fr,t+Math.min(0.12,Math.max(0.05,dur*0.35)));}
+    else{o.frequency.setValueAtTime(fr*2.2,t);o.frequency.exponentialRampToValueAtTime(fr,t+0.05);}
     o.connect(sh);sh.connect(g);
     const len=Math.max(0.35,dur);
     g.gain.setValueAtTime(0.0001,t);g.gain.linearRampToValueAtTime(vel,t+0.006);
@@ -1882,7 +1936,7 @@ function loadSample(tr,id){
   return S.sbuf[k];
 }
 function preloadKit(){if(!S.ctx)return;DRUMS.forEach(d=>{const k=P.kit[d.id];if(isSmp(k)){if(S.smeta.has(k.slice(2)))smpEnsure(k.slice(2)).catch(()=>{});}else loadSample(d.id,k);});}
-function drum(id,t,vel,out,sl){
+function drum(id,t,vel,out,sl,hm){
   // volume, links/rechts en galm per drumklank
   const dv=P.dvol&&P.dvol[id]!=null?P.dvol[id]:1,dp=(P.dpan&&P.dpan[id])||0,dr=(P.drev&&P.drev[id])||0;
   if(dv<=0)return;
@@ -1894,13 +1948,13 @@ function drum(id,t,vel,out,sl){
     out=j;
   }
   const sid=P.kit[id];
-  if(isSmp(sid)){smpDrum(id,sid.slice(2),t,vel,out,sl);return;}
+  if(isSmp(sid)){smpDrum(id,sid.slice(2),t,vel,out,sl,hm);return;}
   if(sid&&sid!=='synth'){
     const b=S.sbuf[sampleKey(id,sid)];
     if(b&&b.getChannelData){
       const src=S.ctx.createBufferSource(),g=S.ctx.createGain();
       // toonhoogte (lager = dieper) en lengte (korter = droger) per drumklank
-      const tu=(P.dtune&&P.dtune[id])||0,dc=(P.ddec&&P.ddec[id])||1,rate=Math.pow(2,tu/12);
+      const tu=((P.dtune&&P.dtune[id])||0)+(hm&&hm.tu||0),dc=Math.max(0.05,((P.ddec&&P.ddec[id])||1)*(hm&&hm.dc!=null?hm.dc:1)),rate=Math.pow(2,tu/12);
       src.buffer=b;src.playbackRate.value=rate;g.gain.value=vel;src.connect(g);g.connect(out);src.start(t);
       if(dc<1){const e=t+b.duration/rate*dc;g.gain.setValueAtTime(vel,Math.max(t,e-0.015));g.gain.linearRampToValueAtTime(0,e);src.stop(e+0.01);}
       return;
@@ -2025,12 +2079,16 @@ function playStep(abs,t0,sd,spb){
       if(fk>=0&&(d.id==='snare'||d.id==='clap'||d.id==='ohat'))continue;
       const pr=probAt(d.id,pos);if(pr<100&&Math.random()*100>=pr)continue;
       if(gl&&Math.random()<gl*0.18)continue;
-      const vel=v===2?1:0.45,rt=ratAt(d.id,pos),sl=slAt(d.id,pos);
-      if(rt>1){for(let i=0;i<rt;i++)drum(d.id,t+i*sd/rt,vel*(1-i*0.1),out,sl);}
+      let vel=v===2?1:0.45;const rt=ratAt(d.id,pos),sl=slAt(d.id,pos),hm=hitMod(d.id,pos);
+      // variatie: elke herhaling net een andere toonhoogte, lengte en kracht
+      const va=P.dvar&&P.dvar[d.id];
+      if(va){hm.tu+=(Math.random()*2-1)*va*3;hm.dc*=1-Math.random()*va*0.6;vel*=1-Math.random()*va*0.3;}
+      const gs=glAt(d.id,pos);
+      if(rt>1){for(let i=0;i<rt;i++)drum(d.id,t+i*sd/rt,vel*(1-i*0.1),out,sl,{tu:hm.tu+gs*i,dc:hm.dc});}
       else if(gl&&Math.random()<gl*0.4){
         const k=2+rnd(3);
-        for(let i=0;i<k;i++)drum(d.id,t+i*sd/k,vel*(1-i*0.15),out,sl);
-      }else drum(d.id,t,vel,out,sl);
+        for(let i=0;i<k;i++)drum(d.id,t+i*sd/k,vel*(1-i*0.15),out,sl,hm);
+      }else drum(d.id,t,vel,out,sl,hm);
     }
   }
   // melodie en bas
@@ -2113,7 +2171,7 @@ function stop(){
   vocStopAll(now);
   if(S.schoke){for(const r in S.schoke){try{S.schoke[r].g.gain.setTargetAtTime(0,now,0.02);}catch(e){}}S.schoke={};}
   if(S.rec)stopRec();
-  renderPlay();markChord(-1);markPos(-1,-1);markSeq(-1);renderKey();const pg=$('partProg');if(pg)pg.style.width='0';
+  renderPlay();markChord(-1);markPos(-1,-1);markSeq(-1);flowMark(-1);renderKey();const pg=$('partProg');if(pg)pg.style.width='0';
 }
 function renderPlay(){
   const b=$('playBtn');
@@ -2625,7 +2683,7 @@ function renderProgs(){
 }
 function refreshChords(){
   const key=musicKey();
-  S.chords=buildChords(key,P.prog,P.sev);
+  S.chords=buildChords(key,P.prog,chordExt(P));
   renderChords();renderTransport();
 }
 function renderChords(){
@@ -2684,13 +2742,16 @@ function renderDrumGrid(){
       const paint=()=>{
         const vv=P.drums[d.id][s],pr=probAt(d.id,s),rt=ratAt(d.id,s),sm=isSmp(P.kit[d.id]);
         c.className='cell'+colClass(s)+(vv===2?' v2':vv===1?' v1':'')+(vv&&pr<100?' pp':'');
-        const tx=[sm?String(slAt(d.id,s)+1):'',rt>1?'×'+rt:'',pr<100?String(pr):''].filter(Boolean).join(' ');
+        const tn=Math.round(((P.dstn[d.id]||[])[s])||0);
+        const tx=[sm?String(slAt(d.id,s)+1):'',tn?(tn>0?'+':'−')+Math.abs(tn):'',rt>1?'×'+rt:'',pr<100?String(pr):''].filter(Boolean).join(' ');
+        if(S.cedit&&S.cedit.row===d.id&&S.cedit.s===s)c.className+=' sel';
         c.innerHTML=vv&&tx?'<span class="pr">'+tx+'</span>':'';
       };
       paint();
       c.style.setProperty('--c',d.col);
       c.setAttribute('aria-label',d.n+' stap '+(s+1));
       c.onclick=()=>{
+        if(S.cellMode&&P.drums[d.id][s]){openCell(d.id,s);return;}
         pushUndo();
         if(S.sliceMode&&P.drums[d.id][s]&&isSmp(P.kit[d.id])){
           // plakje-modus: volgend plakje in dit vakje
@@ -2715,6 +2776,7 @@ function renderDrumGrid(){
         if(!nv&&P.dprob[d.id])P.dprob[d.id][s]=100;
         if(!nv&&P.drat[d.id])P.drat[d.id][s]=1;
         if(!nv&&P.dslc[d.id])P.dslc[d.id][s]=-1;
+        if(!nv){if(P.dstn[d.id])P.dstn[d.id][s]=0;if(P.dsln[d.id])P.dsln[d.id][s]=1;if(P.drgl[d.id])P.drgl[d.id][s]=0;}
         if(nv&&isSmp(P.kit[d.id])){const a=P.dslc[d.id]=P.dslc[d.id]||new Array(MAXS).fill(-1);if(!(a[s]>=0))a[s]=P.dsl[d.id]||0;}
         save();paint();
         if(nv&&!S.playing){ensureCtx();S.ctx.resume();drum(d.id,S.ctx.currentTime+0.005,nv===2?1:0.45,S.bus.drums.in,slAt(d.id,s));}
@@ -2828,7 +2890,9 @@ function renderPick(){
     '<p class="hint" style="margin:6px 0 0">Tik op een klank om hem te horen en te kiezen.</p>'+
     '<div class="fields" style="margin-top:10px"><div class="f"><span>Toonhoogte: <b class="mono tuv"></b></span><input type="range" class="tune" min="-12" max="12" step="1"></div>'+
     '<div class="f"><span>Lengte: <b class="mono dcv"></b></span><input type="range" class="dec" min="10" max="100" step="5"></div></div>'+
-    '<p class="hint" style="margin:4px 0 0">Lager = dieper en trager, zoals een vertraagde plaat. Korter = droger en strakker. Werkt bij alle klanken behalve "Synth".</p>';
+    '<p class="hint" style="margin:4px 0 0">Lager = dieper en trager, zoals een vertraagde plaat. Korter = droger en strakker. Werkt bij alle klanken behalve "Synth".</p>'+
+    '<div class="f" style="margin-top:10px"><span>Variatie: <b class="mono vav"></b></span><input type="range" class="var" min="0" max="100" step="5"></div>'+
+    '<p class="hint" style="margin:4px 0 0">Elke herhaling klinkt dan net anders: een beetje hoger of lager, korter, zachter. Zo klinkt een patroon nooit twee keer hetzelfde, zoals bij Aphex Twin.</p>';
   const ch=box.querySelector('.picks');
   opts.forEach(o=>{
     const b=document.createElement('button');b.type='button';b.className='chip'+(o.id===cur?' on':'');b.textContent=o.n;
@@ -2850,6 +2914,9 @@ function renderPick(){
   let pv=null;const prev=()=>{clearTimeout(pv);pv=setTimeout(()=>{ensureCtx();S.ctx.resume();if(!S.playing)drum(id,S.ctx.currentTime+0.01,1,S.bus.drums.in);},120);};
   tu.oninput=e=>{P.dtune[id]=+e.target.value;save();lab();prev();};
   dc.oninput=e=>{P.ddec[id]=+e.target.value/100;save();lab();prev();};
+  const va=box.querySelector('.var'),vlab=()=>{box.querySelector('.vav').textContent=Math.round((P.dvar[id]||0)*100)+'%';};
+  va.value=Math.round((P.dvar[id]||0)*100);vlab();
+  va.oninput=e=>{P.dvar[id]=+e.target.value/100;save();vlab();};
   box.querySelector('.closebtn').onclick=()=>openPick(null);
 }
 function applyKit(kid){
@@ -2875,7 +2942,7 @@ function renderPads(){
 
 /* ---------- delen (couplet, refrein, bridge...) ---------- */
 // Wat bij een deel hoort. De rest (tempo, toonsoort, mix, effecten) geldt voor het hele nummer.
-const PART_KEYS=['drums','dmute','dprob','drat','dtune','ddec','dvol','dpan','drev','dsl','dslc','kit','mel','prog','sev','rhythm','chordInst','chordFeel','change','ts','bars','color','mix','master','vocs'];
+const PART_KEYS=['drums','dmute','dprob','drat','dtune','ddec','dvol','dpan','drev','dsl','dslc','dstn','dsln','drgl','dvar','kit','mel','prog','sev','ext','twin','flow','rhythm','chordInst','chordFeel','change','ts','bars','color','mix','master','vocs'];
 const PART_NAMES=['Couplet','Refrein','Bridge','Intro','Outro','Pre-refrein','Drop','Breakdown'];
 const PART_COLS=['#D9A92E','#E0703A','#4C8FD6','#4FAF5A','#8E7CD8','#C9577E','#2FA39B','#8F99A3'];
 fixProject.partFix=(d,o)=>{
@@ -2910,7 +2977,7 @@ function doSwitch(i,fromSched){
   refreshVoc(true);renderVoc();
   if(!fromSched){S.arpN=0;}
   syncControls();renderProgs();renderSteps();renderDrumGrid();renderPads();renderPick();renderDrumMix();renderRack($('drumRack'),'drums');renderMel();renderMixer();renderParts();syncKitSel();
-  preloadKit();preloadInst();applyMix();save();
+  preloadKit();preloadInst();applyMix();save();renderFlow();if(S.cedit){S.cedit=null;renderCell();}
 }
 function selectPart(i){
   if(S.playing){
@@ -3233,6 +3300,11 @@ function voicingFor(inst,ch){
     let R=40+((ch.root-4)%12+12)%12,shape=[0,fifth,12,12+third,12+fifth,24];
     if(R>=46){R=45+((ch.root-9)%12+12)%12;shape=[0,fifth,12,12+third,12+fifth];}
     if(POWER.has(inst))return [R,R+fifth,R+12];
+    if(ch.ext>=9&&ch.iv){
+      // jazzgreep: grondtoon, septiem, terts erboven en de kleurnoot bovenaan
+      const I=ch.iv,th=I[1],sv=I[3],top=I[I.length-1];
+      return [R,R+sv,R+12+th,R+12+top];
+    }
     if(sev!=null)shape=shape.map(x=>x===12?sev:x);
     return shape.map(x=>R+x);
   }
@@ -3261,6 +3333,13 @@ function playChordStep(R,ch,step,cpos,cl,t,sd,bpos,out){
   const at=x=>Math.max(now+0.004,x);
   const jit=()=>(Math.random()*2-1)*0.009*fe;
   const vo=voicingFor(inst,ch),gtr=GUITARS.has(inst),evs=eventsAt(R,step,cpos,cl);
+  // twee gitaren: de eerste links, een tweede rechts die net later de hoge akkoordnoten tokkelt (verweven)
+  let out2=null,hi=null,inst2=inst;
+  if(P.twin&&gtr&&S.ctx.createStereoPanner){
+    const pl=S.ctx.createStereoPanner(),pr=S.ctx.createStereoPanner();pl.pan.value=-0.55;pr.pan.value=0.55;pl.connect(out);pr.connect(out);out=pl;out2=pr;
+    hi=[...new Set(ch.pcs.slice(0,3))].map(pc=>{let m=60+((pc-60)%12+12)%12;if(m<62)m+=12;return m;}).sort((a,b)=>a-b);
+    if(inst==='gtmute')inst2='gtclean';
+  }
   // speelt het akkoord zelf op deze tel al de lage grondtoon, dan geen aparte basnoot (anders klinkt hij dubbel)
   const hasLow=vo[0]===lowRoot(inst,ch)&&evs.some(e=>e.k!=='bass');
   for(const e of evs){
@@ -3288,6 +3367,10 @@ function playChordStep(R,ch,step,cpos,cl,t,sd,bpos,out){
         const w=(i===0&&!up?1.12:1)*(i===notes.length-1?0.92:1)*(1+(Math.random()*2-1)*0.06*fe);
         synth(inst,m,at(t0+roll),dur,each*w,out,{bright:br,vib:false});
       });
+    }
+    if(out2&&e.k!=='bass'){
+      const m=hi[(S.twinN=(S.twinN||0)+1)%hi.length];
+      synth(inst2,m,at(t+0.014+jit()),Math.max(sd*1.2,dur*0.9),0.085*v,out2,{bright:br,vib:false});
     }
   }
 }
@@ -3872,18 +3955,22 @@ function setupBackup(){
 // IndexedDB (te groot voor localStorage); het deel onthoudt per spoor alleen welke opname, welke
 // effecten en hoe luid/waar. Effecten worden vooraf berekend, zodat ze tijdens het spelen niets kosten
 // en de zang strak in de maat blijft.
-const VFX=[['geen','Geen effect'],['robot','Robotstem (vocoder)'],['laag','Pitch omlaag'],['tel','Telefoonstem'],['dubbel','Dubbele stem']];
-const VFX_SHORT={geen:'',robot:'robotstem',laag:'pitch omlaag',tel:'telefoon',dubbel:'dubbel'};
+const VFX=[['geen','Geen effect'],['robot','Robotstem (vocoder)'],['laag','Pitch omlaag'],['karakter','Andere stem (karakter)'],['tel','Telefoonstem'],['amp','Oefenversterker'],['dubbel','Dubbele stem'],['omgekeerd','Omgekeerde echo'],['gitaar','Gitaarversterker']];
+const VFX_SHORT={geen:'',robot:'robotstem',laag:'pitch omlaag',karakter:'andere stem',tel:'telefoon',amp:'oefenversterker',dubbel:'dubbel',omgekeerd:'omgekeerde echo',gitaar:'gitaarversterker'};
 const VFX_HINT={
   geen:'Je stem zoals je ze zong.',
   robot:'Je stem stuurt een synth aan die de akkoorden van dit deel speelt. Spreek of zing duidelijk, de woorden komen van jou, de tonen van de akkoorden.',
   laag:'Je stem klinkt lager, maar het tempo blijft hetzelfde.',
   tel:'Dun en krakerig, alsof je door een oude telefoon zingt.',
-  dubbel:'Een tweede en derde stem die net iets anders van timing en toon zijn, links en rechts. Klinkt voller, zoals twee keer ingezongen.'
+  dubbel:'Een tweede en derde stem die net iets anders van timing en toon zijn, links en rechts. Klinkt voller, zoals twee keer ingezongen.',
+  karakter:'Een ander personage: hoger of lager, en met Klankkleur verander je hoe groot de stem klinkt (keel en mond), zonder Mickey Mouse-effect. Kendrick Lamar wisselt zo van stem binnen één nummer.',
+  amp:'Je stem door een klein versterkertje, rauw en midden-rijk, zoals Julian Casablancas bij The Strokes.',
+  omgekeerd:'Een echo die vóór je stem aanzwelt, zoals een band die achteruit speelt. Dromerig, zoals bij Radiohead.',
+  gitaar:'Voor een gitaar die je met de microfoon opneemt: crunchy versterker en luidspreker, en een tweede kant net later voor een brede, verweven klank zoals bij The Strokes.'
 };
 const VMAX=6;
 const VCOLS=['#E0703A','#4C8FD6','#4FAF5A','#C9577E','#8E7CD8','#2FA39B'];
-function defaultTrack(id,name){return {id,name:name||('Stem '+id),take:null,fx:'geen',tune:'uit',down:5,nudge:0,len:0,v:0.9,m:false,pan:0};}
+function defaultTrack(id,name){return {id,name:name||('Stem '+id),take:null,fx:'geen',tune:'uit',down:5,nudge:0,len:0,v:0.9,m:false,pan:0,kp:-5,form:-3,move:0};}
 // Oudere nummers (versie 1.8) hadden één zangspoor in "voc": dat wordt spoor "Stem 1".
 function fixVocs(o){
   if(!o)return;
@@ -4131,8 +4218,10 @@ function chordLenOf(ts,change){const n=(TS[ts]||TS['4/4']).n;return change==='ha
 function vocSpec(pd,v){
   if(!v||!v.take)return null;
   const key=musicKey(),fx=VFX.some(f=>f[0]===v.fx)?v.fx:'geen';
-  const s={take:v.take,fx,tune:fx==='robot'?'uit':(v.tune||'uit'),down:fx==='laag'?(v.down||5):0,nudge:v.nudge||0,kt:key.tonic,km:key.mode};
-  if(fx==='robot'){s.ch=buildChords(key,pd.prog||0,!!pd.sev).map(c=>c.voicing);s.cl=chordLenOf(pd.ts,pd.change);}
+  const s={take:v.take,fx,tune:fx==='robot'?'uit':(v.tune||'uit'),down:fx==='laag'?(v.down||5):fx==='karakter'?-(v.kp==null?-5:v.kp):0,nudge:v.nudge||0,kt:key.tonic,km:key.mode};
+  if(fx==='karakter')s.form=v.form==null?-3:v.form;
+  if(v.move)s.move=v.move;
+  if(fx==='robot'){s.ch=buildChords(key,pd.prog||0,chordExt(pd)).map(c=>c.voicing);s.cl=chordLenOf(pd.ts,pd.change);}
   s.k=JSON.stringify(s);return s;
 }
 function refreshVoc(now){
@@ -4233,7 +4322,8 @@ function curveAt(pt,cv,i){
 }
 // Toonhoogte veranderen zonder het tempo te veranderen (TD-PSOLA): we knippen de stem in stukjes
 // van één trilling en leggen die dichter op elkaar (hoger) of verder uit elkaar (lager).
-function psola(x,sr,f0At,semiAt){
+function psola(x,sr,f0At,semiAt,ff){
+  ff=ff||1;
   const N=x.length,defP=Math.round(sr*0.006),marks=[];
   let i=0,prevV=false;
   while(i<N){
@@ -4251,9 +4341,19 @@ function psola(x,sr,f0At,semiAt){
   while(t<N){
     while(k+1<marks.length&&Math.abs(marks[k+1].p-t)<=Math.abs(marks[k].p-t))k++;
     const m=marks[k],Pm=m.P,r=m.v?Math.pow(2,semiAt(t)/12):1,c=Math.round(t);
-    for(let j=-Pm;j<Pm;j++){
-      const s=m.p+j,d=c+j;if(s<0||s>=N||d<0||d>=N)continue;
-      const w=0.5+0.5*Math.cos(Math.PI*j/Pm);out[d]+=x[s]*w;ws[d]+=w;
+    if(ff===1){
+      for(let j=-Pm;j<Pm;j++){
+        const s=m.p+j,d=c+j;if(s<0||s>=N||d<0||d>=N)continue;
+        const w=0.5+0.5*Math.cos(Math.PI*j/Pm);out[d]+=x[s]*w;ws[d]+=w;
+      }
+    }else{
+      // klankkleur: het korreltje sneller (hoger, kleinere stem) of trager (lager, grotere stem) uitlezen
+      const L=Math.max(4,Math.round(Pm/ff));
+      for(let j=-L;j<L;j++){
+        const sp=m.p+j*ff,d=c+j;if(d<0||d>=N)continue;
+        const i0=Math.floor(sp);if(i0<0||i0+1>=N)continue;
+        const v=x[i0]+(x[i0+1]-x[i0])*(sp-i0),w=0.5+0.5*Math.cos(Math.PI*j/L);out[d]+=v*w;ws[d]+=w;
+      }
     }
     t+=Pm/r;
   }
@@ -4315,6 +4415,48 @@ function phone(y,sr){
   return z;
 }
 function delayRead(a,pos){const i=Math.floor(pos),f=pos-i;if(i<0||i+1>=a.length)return 0;return a[i]+(a[i+1]-a[i])*f;}
+
+// --- extra zangeffecten (vooraf berekend, net als de rest) ---
+function rmsOf(x){let q=0;for(let i=0;i<x.length;i++)q+=x[i]*x[i];return Math.sqrt(q/Math.max(1,x.length));}
+function matchRms(z,ref){const a=rmsOf(z),b=rmsOf(ref);if(a>1e-6){const g=b/a;for(let i=0;i<z.length;i++)z[i]*=g;}return z;}
+function shapeArr(z,drive,bias){const o=Math.tanh(bias);for(let i=0;i<z.length;i++)z[i]=(Math.tanh(z[i]*drive+bias)-o)/Math.tanh(drive);return z;}
+// klein versterkertje: dun onderaan, rauw in het midden, luidspreker dempt de hoogte
+function practiceAmp(y,sr){
+  const z=y.slice();
+  biquad(z,sr,'hp',280,0.7);biquad(z,sr,'hp',180,0.7);
+  shapeArr(z,6,0.2);
+  const body=z.slice();biquad(body,sr,'bp',1500,1.3);
+  for(let i=0;i<z.length;i++)z[i]=z[i]*0.75+body[i]*0.9;
+  biquad(z,sr,'lp',4200,0.9);biquad(z,sr,'lp',5200,0.7);
+  return matchRms(z,y);
+}
+// gitaar door een crunchy versterker en luidspreker, met een tweede kant net later (breed, verweven)
+function guitarAmp(y,sr){
+  const n=y.length,z=y.slice();
+  biquad(z,sr,'hp',90,0.7);
+  const hi=y.slice();biquad(hi,sr,'hp',900,0.7);for(let i=0;i<n;i++)z[i]+=hi[i]*0.6;
+  shapeArr(z,14,0.25);
+  const mid=z.slice();biquad(mid,sr,'bp',650,0.9);for(let i=0;i<n;i++)z[i]-=mid[i]*0.35;
+  biquad(z,sr,'lp',4600,0.8);biquad(z,sr,'lp',5600,0.7);biquad(z,sr,'hp',100,0.7);
+  matchRms(z,y);
+  const R=new Float32Array(n);
+  for(let i=0;i<n;i++){const d=(0.016+0.0015*Math.sin(2*Math.PI*0.4*i/sr))*sr;R[i]=delayRead(z,i-d);}
+  biquad(R,sr,'lp',3800,0.7);
+  const L=new Float32Array(n);for(let i=0;i<n;i++){L[i]=z[i]*0.95+R[i]*0.12;R[i]=R[i]*0.9+z[i]*0.18;}
+  return [L,R];
+}
+// omgekeerde echo: echo op de achterstevoren opname, dan weer omdraaien = de echo zwelt aan vóór elke zin
+function revEcho(y,sr,bpm){
+  const n=y.length,r=y.slice().reverse(),d=Math.round(60/bpm/2*sr),L=new Float32Array(n),R=new Float32Array(n);
+  for(let k=1;k<=5;k++){
+    const g=0.62*Math.pow(0.68,k-1),dst=k%2?L:R,o=k*d;
+    for(let i=o;i<n;i++)dst[i]+=r[i-o]*g;
+  }
+  biquad(L,sr,'lp',3400,0.7);biquad(R,sr,'lp',3000,0.7);
+  L.reverse();R.reverse();
+  for(let i=0;i<n;i++){L[i]=y[i]*0.85+L[i];R[i]=y[i]*0.85+R[i];}
+  return [L,R];
+}
 async function renderVocBuf(sp){
   const e=await takeData(sp.take),m=e.meta,sr=m.sr,x=e.x;
   if(!e.pt)e.pt=await pitchTrack(x,sr);
@@ -4330,10 +4472,12 @@ async function renderVocBuf(sp){
   if(m.tonic!=null){ks=((sp.kt-m.tonic)%12+12)%12;if(ks>6)ks-=12;}
   const key={tonic:sp.kt,mode:sp.km};
   const f0At=i=>hzAt(pt,a+i);
+  const ff=sp.fx==='karakter'?Math.pow(2,(sp.form||0)/12):1;
   const shift=fxs=>{
     const cv=shiftCurve(pt,ks-sp.down+fxs,sp.tune,key);
-    if(!cv.some(v=>Math.abs(v)>0.003))return y0;
-    return psola(y0,sr,f0At,i=>curveAt(pt,cv,a+i));
+    if(!cv.some(v=>Math.abs(v)>0.003)&&ff===1)return y0;
+    const r=psola(y0,sr,f0At,i=>curveAt(pt,cv,a+i),ff);
+    return ff===1?r:matchRms(r,y0); // klankkleur veranderen mag niet zachter klinken
   };
   await pause();
   let chans;
@@ -4341,6 +4485,9 @@ async function renderVocBuf(sp){
   else{
     const y=shift(0);
     if(sp.fx==='tel')chans=[phone(y,sr)];
+    else if(sp.fx==='amp')chans=[practiceAmp(y,sr)];
+    else if(sp.fx==='gitaar')chans=guitarAmp(y,sr);
+    else if(sp.fx==='omgekeerd')chans=revEcho(y,sr,m.bpm||90);
     else if(sp.fx==='dubbel'){
       await pause();
       const A=shift(0.12),Bv=shift(-0.1),L=new Float32Array(n),R=new Float32Array(n);
@@ -4351,6 +4498,12 @@ async function renderVocBuf(sp){
       }
       chans=[L,R];
     }else chans=[y];
+  }
+  // beweging: langzaam van links naar rechts en terug, één keer per maat
+  if(sp.move>0){
+    if(chans.length===1)chans=[chans[0],chans[0].slice()];
+    const bar=(TS[m.ts]||TS['4/4']).n*60/(m.bpm||90)/4,[L,R]=chans;
+    for(let i=0;i<n;i++){const pn=sp.move*Math.sin(2*Math.PI*i/sr/bar),th=(pn+1)*Math.PI/4;L[i]*=Math.cos(th)*Math.SQRT2;R[i]*=Math.sin(th)*Math.SQRT2;}
   }
   // begin en einde zacht, en nooit boven het maximum
   const fi=Math.round(0.004*sr),fo=Math.round(tail*sr);
@@ -4420,6 +4573,9 @@ function renderVoc(){
   VFX.forEach(([id,n])=>{const b=document.createElement('button');b.type='button';b.className='chip'+(v.fx===id?' on':'');b.textContent=n;
     b.onclick=()=>{v.fx=id;save();renderVoc();};fxb.appendChild(b);});
   $('vocDownBox').hidden=v.fx!=='laag';$('vocDown').value=v.down||5;$('vocDownVal').textContent=v.down||5;
+  $('vocKarBox').hidden=v.fx!=='karakter';const kp=v.kp==null?-5:v.kp,fm=v.form==null?-3:v.form;
+  $('vocKp').value=kp;$('vocKpVal').textContent=(kp>0?'+':'')+kp;$('vocForm').value=fm;$('vocFormVal').textContent=(fm>0?'+':'')+fm;
+  $('vocMove').value=Math.round((v.move||0)*100);$('vocMoveVal').textContent=Math.round((v.move||0)*100)+'%';
   document.querySelectorAll('#vocTune button').forEach(b=>{b.setAttribute('aria-pressed',String(b.dataset.t===(v.tune||'uit')));b.disabled=v.fx==='robot';});
   $('vocKey').textContent=keyName(musicKey());
   $('vocFxHint').textContent=VFX_HINT[v.fx]+' '+(v.fx==='robot'?'Toonhoogtecorrectie doet hier niets: de akkoorden bepalen de tonen.':
@@ -4492,6 +4648,9 @@ function setupVoc(){
   $('vocName').onchange=e=>{const n=e.target.value.trim().slice(0,20);if(n){curTrack().name=n;save();renderVocTracks();}else e.target.value=curTrack().name;};
   $('vocLen').onchange=e=>{curTrack().len=+e.target.value;save();};
   $('vocDown').oninput=e=>{curTrack().down=+e.target.value;$('vocDownVal').textContent=e.target.value;save();renderVocTrackInfo();};
+  $('vocKp').oninput=e=>{const v=+e.target.value;curTrack().kp=v;$('vocKpVal').textContent=(v>0?'+':'')+v;save();renderVocTrackInfo();};
+  $('vocForm').oninput=e=>{const v=+e.target.value;curTrack().form=v;$('vocFormVal').textContent=(v>0?'+':'')+v;save();renderVocTrackInfo();};
+  $('vocMove').oninput=e=>{curTrack().move=+e.target.value/100;$('vocMoveVal').textContent=e.target.value+'%';save();renderVocTrackInfo();};
   document.querySelectorAll('#vocTune button').forEach(b=>b.onclick=()=>{curTrack().tune=b.dataset.t;save();renderVoc();});
   $('vocNudge').oninput=e=>{const v=curTrack();v.nudge=+e.target.value;$('vocNudgeVal').textContent=(v.nudge>0?'+':'')+v.nudge;save();};
   $('vocNudge').onchange=()=>{
@@ -4634,11 +4793,11 @@ function smpSlice(e,k){
 }
 function slAt(row,s){const a=P.dslc&&P.dslc[row];return a&&a[s]!=null&&a[s]>=0?a[s]:(P.dsl[row]||0);}
 // Afspelen op een drumrij. Eén stem per rij: een nieuwe slag kapt de vorige af (zoals een sampler).
-function smpDrum(row,id,t,vel,out,sl){
+function smpDrum(row,id,t,vel,out,sl,hm){
   const e=smpReady(id);
   if(!e){smpEnsure(id).catch(()=>{});return;}
   const info=smpSlice(e,sl==null?(P.dsl[row]||0):sl);if(!info)return;
-  const c=S.ctx,tu=(P.dtune&&P.dtune[row])||0,dc=(P.ddec&&P.ddec[row])||1,rate=Math.pow(2,tu/12);
+  const c=S.ctx,tu=((P.dtune&&P.dtune[row])||0)+(hm&&hm.tu||0),dc=Math.max(0.05,((P.ddec&&P.ddec[row])||1)*(hm&&hm.dc!=null?hm.dc:1)),rate=Math.pow(2,tu/12);
   const play=info.dur*dc,len=play/rate,v=vel*SGAIN;
   const pv=S.schoke[row];
   if(pv&&pv.end>t){try{pv.g.gain.cancelScheduledValues(t);pv.g.gain.setTargetAtTime(0,t,0.004);}catch(_){}}
@@ -4883,7 +5042,7 @@ function setupSampler(){
     b.dataset.sure='';b.textContent='Verwijder';if(S.ssel)smpDelete(S.ssel);
   };
   $('sliceBtn').onclick=()=>{
-    S.sliceMode=!S.sliceMode;S.ratMode=false;S.probMode=false;
+    S.sliceMode=!S.sliceMode;S.ratMode=false;S.probMode=false;cellModeOff();
     $('ratBtn').classList.remove('on');$('probBtn').classList.remove('on');
     const b=$('sliceBtn');b.classList.toggle('on',S.sliceMode);b.setAttribute('aria-pressed',String(S.sliceMode));
     msg(S.sliceMode?'Plakje-modus: tik op een gevuld vakje van een rij met een sample om het volgende plakje te kiezen.':'');
@@ -4991,6 +5150,145 @@ function setupIdle(){
     }
   });
 }
+
+/* ---------- per vakje: toonhoogte, lengte, glijdende roffel ---------- */
+// P.dstn[rij][stap] = halve tonen erbij, P.dsln[rij][stap] = lengte (0,1-1), P.drgl[rij][stap] = halve tonen per roffelslag.
+function hitMod(row,s){return {tu:((P.dstn[row]||[])[s])||0,dc:((P.dsln[row]||[])[s])||1};}
+function glAt(row,s){return ((P.drgl[row]||[])[s])||0;}
+function arr(o,row,fill){return o[row]=o[row]||new Array(MAXS).fill(fill);}
+function cellModeOff(){S.cellMode=false;const b=$('cellBtn');if(b){b.classList.remove('on');b.setAttribute('aria-pressed','false');}if(S.cedit){S.cedit=null;renderCell();renderDrumGrid();}}
+function openCell(row,s){S.cedit={row,s};renderCell();renderDrumGrid();setTimeout(()=>{const el=$('cellEdit');if(el&&el.scrollIntoView)el.scrollIntoView({block:'nearest',behavior:'smooth'});},30);}
+function cellPreview(){
+  const E=S.cedit;if(!E||S.playing)return;
+  ensureCtx();S.ctx.resume();
+  const hm=hitMod(E.row,E.s),rt=ratAt(E.row,E.s),gs=glAt(E.row,E.s),q=60/P.bpm/4,t0=S.ctx.currentTime+0.01;
+  for(let i=0;i<rt;i++)drum(E.row,t0+i*q/rt,1-i*0.1,S.bus.drums.in,slAt(E.row,E.s),{tu:hm.tu+gs*i,dc:hm.dc});
+}
+function renderCell(){
+  const box=$('cellEdit');if(!box)return;
+  const E=S.cedit;box.hidden=!E;if(!E){box.innerHTML='';return;}
+  const d=DRUMS.find(x=>x.id===E.row),tn=((P.dstn[E.row]||[])[E.s])||0,ln=((P.dsln[E.row]||[])[E.s])||1,gl=glAt(E.row,E.s),rt=ratAt(E.row,E.s);
+  box.style.setProperty('--c',d.col);
+  box.innerHTML='<div class="row" style="margin-bottom:8px"><b>'+d.n+', vakje '+(E.s+1)+'</b><span class="spacer"></span><button type="button" class="btn sm closebtn" aria-label="Sluiten">✕</button></div>'+
+    '<div class="fields"><div class="f"><span>Toonhoogte (halve tonen): <b class="mono"></b></span><input type="range" class="ctu" min="-12" max="12" step="1"></div>'+
+    '<div class="f"><span>Lengte: <b class="mono"></b></span><input type="range" class="cln" min="10" max="100" step="5"></div></div>'+
+    '<div class="f" style="margin-top:10px"><span>Roffel glijdt'+(rt>1?' ('+rt+' slagen)':' (zet eerst ⁂ Roffel op dit vakje)')+'</span><div class="chips cgl" style="margin:0"></div></div>'+
+    '<div class="row" style="margin-top:10px"><button type="button" class="btn sm cprev">▶ Beluister</button><button type="button" class="btn sm crand">🎲 Hele rij variëren</button><button type="button" class="btn sm creset">Rij terugzetten</button></div>'+
+    '<p class="hint" style="margin:6px 0 0">Tik op een ander gevuld vakje om dat te bewerken. Een roffel die glijdt, gaat per slag hoger of lager: typisch voor Aphex Twin en trap-hihats.</p>';
+  const tu=box.querySelector('.ctu'),lnI=box.querySelector('.cln'),labs=box.querySelectorAll('.f b');
+  const lab=()=>{const a=((P.dstn[E.row]||[])[E.s])||0;labs[0].textContent=(a>0?'+':'')+a;labs[1].textContent=Math.round((((P.dsln[E.row]||[])[E.s])||1)*100)+'%';};
+  tu.value=tn;lnI.value=Math.round(ln*100);lab();
+  let pv=null;const prev=()=>{clearTimeout(pv);pv=setTimeout(cellPreview,120);};
+  tu.oninput=e=>{arr(P.dstn,E.row,0)[E.s]=+e.target.value;save();lab();prev();renderDrumGrid();};
+  lnI.oninput=e=>{arr(P.dsln,E.row,1)[E.s]=+e.target.value/100;save();lab();prev();};
+  const cg=box.querySelector('.cgl');
+  [[-4,'↓↓'],[-2,'↓'],[0,'Niet'],[2,'↑'],[4,'↑↑']].forEach(([v,n])=>{
+    const b=document.createElement('button');b.type='button';b.className='chip'+(gl===v?' on':'');b.textContent=n;
+    b.onclick=()=>{arr(P.drgl,E.row,0)[E.s]=v;save();renderCell();cellPreview();};cg.appendChild(b);
+  });
+  box.querySelector('.cprev').onclick=cellPreview;
+  box.querySelector('.crand').onclick=()=>{
+    pushUndo();const a=arr(P.dstn,E.row,0),b=arr(P.dsln,E.row,1);
+    for(let s=0;s<MAXS;s++)if(P.drums[E.row][s]){a[s]=Math.random()<0.6?0:[-5,-3,-2,2,3,5,7,12][rnd(8)];b[s]=Math.random()<0.6?1:[0.25,0.4,0.6][rnd(3)];}
+    save();renderCell();renderDrumGrid();msg('Elke slag op deze rij heeft nu een eigen toonhoogte en lengte. ↶ zet het terug.');
+  };
+  box.querySelector('.creset').onclick=()=>{pushUndo();delete P.dstn[E.row];delete P.dsln[E.row];delete P.drgl[E.row];save();renderCell();renderDrumGrid();};
+  box.querySelector('.closebtn').onclick=()=>cellModeOff();
+}
+function setupCells(){
+  $('cellBtn').onclick=()=>{
+    const on=!S.cellMode;
+    S.ratMode=false;S.probMode=false;S.sliceMode=false;['ratBtn','probBtn','sliceBtn'].forEach(i=>$(i).classList.remove('on'));
+    if(!on){cellModeOff();msg('');return;}
+    S.cellMode=true;const b=$('cellBtn');b.classList.add('on');b.setAttribute('aria-pressed','true');
+    msg('Per vakje: tik op een gevuld vakje om alleen die slag aan te passen.');
+  };
+}
+
+
+/* ---------- tekst: cut-up en flow ---------- */
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=rnd(i+1);[a[i],a[j]]=[a[j],a[i]];}return a;}
+// Cut-up zoals Thom Yorke: elke zin in twee stukken knippen (bij een komma, anders in het midden) en de stukken door elkaar leggen.
+function srcText(text){return String(text||'').split(/\n/).filter(l=>!/—\s*bewaard\s*—/.test(l)).join('\n');}
+function cutLines(text){
+  const lines=srcText(text).split(/\n+/).map(l=>l.trim()).filter(l=>l.length>2);
+  const bits=[];
+  for(const l of lines){
+    const c=l.split(/[,;:]\s*/).filter(Boolean);
+    if(c.length>1){bits.push(...c);continue;}
+    const w=l.split(/\s+/);if(w.length<3){bits.push(l);continue;}
+    const m=Math.max(1,Math.min(w.length-1,Math.round(w.length/2+(Math.random()*2-1))));
+    bits.push(w.slice(0,m).join(' '),w.slice(m).join(' '));
+  }
+  shuffle(bits);
+  const out=[];for(let i=0;i+1<bits.length&&out.length<10;i+=2)out.push(bits[i]+' '+bits[i+1]);
+  if(bits.length%2&&out.length<10)out.push(bits[bits.length-1]);
+  return out;
+}
+function cutWords(text){
+  const w=srcText(text).split(/[\s,.;:!?"()—–-]+/).filter(x=>x.length>0).map(x=>x==='ik'||x==='Ik'?'ik':x.toLowerCase());if(w.length<3)return [];
+  const out=[];
+  for(let k=0;k<8;k++){const n=Math.min(w.length,3+rnd(5)),pool=shuffle(w.slice());const pick=[];for(const x of pool){if(pick.length>=n)break;if(pick[pick.length-1]!==x)pick.push(x);}out.push(pick.join(' '));}
+  return out;
+}
+function renderCut(lines){
+  const box=$('cutOut');box.innerHTML='';
+  if(!lines.length){box.innerHTML='<p class="hint" style="margin:0">Schrijf of plak eerst een paar zinnen in het tekstvak.</p>';return;}
+  lines.forEach(l=>{
+    const b=document.createElement('button');b.type='button';b.textContent=l.charAt(0).toUpperCase()+l.slice(1);
+    b.onclick=()=>{if(b.classList.contains('kept'))return;const t=$('lyrText');P.lyrics=(t.value.replace(/\s+$/,'')+(t.value.includes('— bewaard —')?'':'\n\n— bewaard —')+'\n'+b.textContent).replace(/^\n+/,'');t.value=P.lyrics;save();b.classList.add('kept');};
+    box.appendChild(b);
+  });
+}
+// Flow: een regel = een maat; lettergrepen op de tellen, in achtsten of in zestienden.
+function flowTokens(line){return String(line||'').trim().split(/[\s\-–]+/).filter(Boolean);}
+function flowLayout(line){
+  const bs=barSteps(),tk=flowTokens(line),n=tk.length,q=bs%4===0&&n<=bs/4?4:n<=Math.floor(bs/2)?2:1,cells=new Array(bs).fill(null);
+  tk.slice(0,Math.floor(bs/q)).forEach((t,i)=>{cells[i*q]=t;});
+  return {cells,cut:n>Math.floor(bs/q)};
+}
+function renderFlow(){
+  const box=$('flowRows');if(!box)return;
+  const fp=$('flowPart');fp.textContent='Deel: '+P.parts[P.cur].name;fp.style.setProperty('--pc',partCol(P.cur));
+  if(!P.flow.length)P.flow=[''];
+  box.innerHTML='';S.flowCells=[];
+  const bs=barSteps(),g=TS[P.ts].g;
+  P.flow.forEach((line,li)=>{
+    const row=document.createElement('div');row.className='frow';
+    const inp=document.createElement('input');inp.type='text';inp.value=line;inp.placeholder='Maat '+(li+1)+': bv. "ik . zing in de maat"';inp.setAttribute('aria-label','Flow, maat '+(li+1));
+    const grid=document.createElement('div');grid.className='fgrid';grid.style.gridTemplateColumns='repeat('+bs+',minmax(0,1fr))';
+    const paint=()=>{
+      const L=flowLayout(inp.value);grid.innerHTML='';const cs=[];
+      for(let st=0;st<bs;st++){const c=document.createElement('i');const t=L.cells[st];if(g.includes(st))c.classList.add('beat');
+        if(t!=null){c.textContent=t==='.'?'·':t;c.classList.add(t==='.'?'rest':'on');}grid.appendChild(c);cs.push(c);}
+      S.flowCells[li]=cs;
+    };
+    inp.oninput=()=>{P.flow[li]=inp.value;save();paint();};
+    paint();row.appendChild(inp);row.appendChild(grid);box.appendChild(row);
+  });
+}
+function flowMark(step){
+  if(S.tab!=='voc'||!S.flowCells||!S.flowCells.length)return;
+  if(S.flowLast)S.flowLast.classList.remove('now');S.flowLast=null;
+  if(step==null||step<0)return;
+  const bs=barSteps(),li=Math.floor(step/bs)%P.flow.length,c=S.flowCells[li]&&S.flowCells[li][step%bs];
+  if(c){c.classList.add('now');S.flowLast=c;}
+}
+function setupText(){
+  const t=$('lyrText');t.value=P.lyrics||'';
+  t.oninput=()=>{P.lyrics=t.value;save();};
+  $('cutLines').onclick=()=>renderCut(cutLines(t.value));
+  $('cutWords').onclick=()=>renderCut(cutWords(t.value));
+  $('flowAdd').onclick=()=>{if(P.flow.length>=16){msg('Hoogstens 16 regels per deel.');return;}P.flow.push('');save();renderFlow();const ins=document.querySelectorAll('#flowRows input');if(ins.length)ins[ins.length-1].focus();};
+  $('flowFromLyr').onclick=()=>{
+    const lines=srcText(t.value).split(/\n+/).map(l=>l.trim()).filter(Boolean).slice(0,16);
+    if(!lines.length){msg('Schrijf eerst wat tekst in het tekstvak hierboven.');return;}
+    P.flow=lines;save();renderFlow();msg('Elke regel staat nu op een maat. Zet spaties of streepjes tussen de lettergrepen waar je wil.');
+  };
+  $('flowClear').onclick=()=>{P.flow=[''];save();renderFlow();};
+  renderFlow();
+}
+
 function tick(ts){
   requestAnimationFrame(tick);
   if(S.playing&&S.ctx){
@@ -5003,7 +5301,7 @@ function tick(ts){
       last=S.sq.shift();
       S.curPos=last.pos;S.curPosT=last.t;
     }
-    if(last){markPos(last.pos,last.cpos);markSeq(last.step);const pg=$('partProg'),SL=patLen()*seqMax();if(pg)pg.style.width=(((last.step%SL)+1)/SL*100)+'%';}
+    if(last){markPos(last.pos,last.cpos);markSeq(last.step);flowMark(last.step);const pg=$('partProg'),SL=patLen()*seqMax();if(pg)pg.style.width=(((last.step%SL)+1)/SL*100)+'%';}
   }
   if(S.hum&&S.ctx)humWatch();
   if(S.vrec&&S.ctx)vrecWatch();
@@ -5018,7 +5316,7 @@ function syncControls(){
   $('glitch').value=P.glitch;$('glitchVal').textContent=P.glitch;
   $('tsSel').value=P.ts;$('barsSel').value=String(P.bars);
   $('metroBtn').textContent=P.metro?'Klik aan':'Klik uit';$('metroBtn').classList.toggle('on',P.metro);
-  $('rhythm').value=P.rhythm;$('chordInst').value=P.chordInst;$('changeSel').value=P.change;$('sevCb').checked=!!P.sev;
+  $('rhythm').value=P.rhythm;$('chordInst').value=P.chordInst;$('changeSel').value=P.change;$('extSel').value=String(chordExt(P));$('twinCb').checked=!!P.twin;
   $('mVol').value=Math.round(P.master.v*100);$('mVolVal').textContent=Math.round(P.master.v*100)+'%';$('mLoud').value=P.master.loud==null?40:P.master.loud;$('mLoudVal').textContent=(P.master.loud==null?40:P.master.loud)+'%';$('mFilter').value=P.master.filter;$('mLofi').value=P.master.lofi;
   $('mDly').value=String(P.master.dly);$('mFb').value=P.master.fb;$('mVinyl').value=P.master.vinyl||0;$('mRoom').value=P.master.room||'zaal';
   $('chordCol').value=P.color.chords||'normaal';$('chordFeel').value=P.chordFeel==null?40:P.chordFeel;$('chordFeelVal').textContent=P.chordFeel==null?40:P.chordFeel;renderChordInfo();
@@ -5027,12 +5325,13 @@ function renderAll(){
   syncKitSel();preloadKit();preloadInst();
   renderScenes();renderProgs();refreshChords();renderSteps();renderDrumGrid();renderPads();renderDrumMix();renderRack($('drumRack'),'drums');renderMasterEQ();renderMel();renderParts();renderMixer();renderKey();
   refreshVoc(true);renderVoc();
+  if(typeof renderFlow==='function'){renderFlow();const lt=$('lyrText');if(lt&&document.activeElement!==lt)lt.value=P.lyrics||'';}
 }
 function showTab(t){
   S.tab=t;
   document.querySelectorAll('.tab').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.tab===t)));
   document.querySelectorAll('.page').forEach(p=>p.hidden=p.id!=='page-'+t);
-  if(t==='voc'){renderVoc();requestAnimationFrame(drawVoc);}
+  if(t==='voc'){renderVoc();renderFlow();requestAnimationFrame(drawVoc);}
   if(t==='mix'){renderMixer();renderMasterEQ();}
   if(t==='beat'){renderDrumMix();renderRack($('drumRack'),'drums');fillSmpFrom();requestAnimationFrame(drawSmp);}
   if(t==='mel'||t==='chords'){renderRack($('melRack'),S.track);renderRack($('chordRack'),'chords');}
@@ -5043,7 +5342,7 @@ function setBpm(v){
 }
 function structChanged(){
   for(const tr of ['A','B']){const T=P.mel[tr];syncMel(P.mel);T.vars=T.vars.map(v=>v.filter(n=>n.s<patLen()));T.notes=T.vars[T.ed];}
-  save();renderDrumGrid();renderMelGrid();renderSteps();renderTransport();
+  save();renderDrumGrid();renderMelGrid();renderSteps();renderTransport();renderFlow();
 }
 function init(){
   load();
@@ -5092,7 +5391,10 @@ function init(){
   $('chordInst').onchange=e=>{P.chordInst=e.target.value;save();const i=chordInstNow();if(i)loadInst(i);renderChordInfo();};
   $('chordFeel').oninput=e=>{P.chordFeel=+e.target.value;$('chordFeelVal').textContent=e.target.value;save();};
   $('changeSel').onchange=e=>{P.change=e.target.value;save();renderSteps();};
-  $('sevCb').onchange=e=>{P.sev=e.target.checked;save();refreshChords();renderMel();};
+  $('twinCb').onchange=e=>{P.twin=e.target.checked;save();
+    msg(P.twin?(GUITARS.has(chordInstNow()||'')?'Twee gitaren: de ene speelt de akkoorden links, de andere tokkelt rechts de hoge noten ertussen, zoals bij The Strokes.':'Twee gitaren werkt met een gitaar als klank. Kies bij Klank bijvoorbeeld "Gitaar gedempt" of "Gitaar overdrive".'):'');};
+  $('extSel').onchange=e=>{P.ext=+e.target.value;P.sev=P.ext>=7;save();refreshChords();renderMel();
+    msg({0:'Gewone drieklanken.',7:'Kleurakkoorden met een septiem.',9:'Jazz-akkoorden met een none: warmer en voller, zoals op To Pimp a Butterfly.',13:'Neo-soul: elf en dertien erbij. Mooi met Rhodes, piano of jazzgitaar.'}[P.ext]);};
   $('kmAuto').onchange=()=>{
     const before=curKey();S.keyMode='auto';save();
     renderProgs();keyChanged(!sameKey(before,curKey()));renderKey();
@@ -5111,12 +5413,12 @@ function init(){
   };
   // beat
   $('drumRand').onclick=randomDrums;
-  $('ratBtn').onclick=()=>{S.ratMode=!S.ratMode;S.probMode=false;S.sliceMode=false;$('sliceBtn').classList.remove('on');$('probBtn').classList.remove('on');const b=$('ratBtn');b.classList.toggle('on',S.ratMode);b.setAttribute('aria-pressed',String(S.ratMode));
+  $('ratBtn').onclick=()=>{S.ratMode=!S.ratMode;S.probMode=false;S.sliceMode=false;$('sliceBtn').classList.remove('on');cellModeOff();$('probBtn').classList.remove('on');const b=$('ratBtn');b.classList.toggle('on',S.ratMode);b.setAttribute('aria-pressed',String(S.ratMode));
     msg(S.ratMode?'Roffel-modus: tik op een gevuld vakje voor 2, 3 of 4 snelle slagen.':'');};
-  $('probBtn').onclick=()=>{S.ratMode=false;$('ratBtn').classList.remove('on');S.sliceMode=false;$('sliceBtn').classList.remove('on');S.probMode=!S.probMode;const b=$('probBtn');b.classList.toggle('on',S.probMode);b.setAttribute('aria-pressed',String(S.probMode));
+  $('probBtn').onclick=()=>{S.ratMode=false;$('ratBtn').classList.remove('on');S.sliceMode=false;$('sliceBtn').classList.remove('on');cellModeOff();S.probMode=!S.probMode;const b=$('probBtn');b.classList.toggle('on',S.probMode);b.setAttribute('aria-pressed',String(S.probMode));
     msg(S.probMode?'Kans-modus: tik op een gevuld vakje voor 75, 50 of 25%. Elke herhaling klinkt dan net anders.':'');};
   setupFx();
-  $('drumClear').onclick=()=>{pushUndo();P.dprob={};P.drat={};P.dslc={};P.drums=emptyDrums();save();renderDrumGrid();msg('Drums gewist. ↶ zet ze terug.');};
+  $('drumClear').onclick=()=>{pushUndo();P.dprob={};P.drat={};P.dslc={};P.dstn={};P.dsln={};P.drgl={};P.drums=emptyDrums();save();renderDrumGrid();msg('Drums gewist. ↶ zet ze terug.');};
   document.querySelectorAll('.undoBtn').forEach(b=>b.onclick=undo);
   document.querySelectorAll('.liveRecBtn').forEach(b=>b.onclick=()=>setLiveRec(!S.liveRec));
   // melodie
@@ -5141,7 +5443,7 @@ function init(){
   $('feel').oninput=e=>{P.mel[S.track].feel=+e.target.value;$('feelVal').textContent=e.target.value;save();};
   $('glideCb').onchange=e=>{P.mel[S.track].glide=e.target.checked;save();};
   $('humBtn').onclick=toggleHum;
-  setupVoc();setupVars();setupBackup();setupSampler();setupIdle();
+  setupVoc();setupVars();setupBackup();setupSampler();setupIdle();setupCells();setupText();
   $('humNudge').oninput=e=>nudgeHum(+e.target.value);
   $('melRand').onclick=randomMel;
   $('melClear').onclick=()=>{pushUndo();P.mel[S.track].notes=[];save();renderMelGrid();msg((S.track==='A'?'Melodie':'Bas')+' gewist. ↶ zet hem terug.');};

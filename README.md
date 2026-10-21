@@ -29,6 +29,10 @@ eindpoort dicht, worden galm/echo vervangen door verse (`flushTails`) en wordt d
 (`startTimer`) en plant met het scherm uit 1,5 s vooruit; na een hapering slaat hij gemiste stappen over.
 
 ## Versies
+- **3.3** – Per vakje toonhoogte/lengte en glijdende roffels (`P.dstn`, `P.dsln`, `P.drgl`), variatie per drumrij (`P.dvar`).
+  Akkoordkleur 7/9/11-13 met jazzvoicings (`P.ext`), 808 glijdt bij Legato. Zangeffecten: andere stem (formanten via PSOLA),
+  oefenversterker, gitaarversterker, omgekeerde echo, beweging links-rechts. Twee verweven gitaren (`P.twin`).
+  Tekst met cut-up (`P.lyrics`) en flow-raster per deel (`P.flow`). Bouw op ubuntu-24.04, checkout/setup-java v5.
 - **3.2** – Geen ruis meer na het afspelen: eindpoort + uitklinken + afsluiten, vinylkraak alleen tijdens het
   afspelen, galm/echo leeg na het afsluiten. Planner met eigen klok (Worker), verder vooruit met het scherm uit,
   inhaalregel na een hapering. `play()` kan niet dubbel starten; een snelle start die nog laadt, begint niet
