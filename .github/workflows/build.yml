@@ -1,0 +1,60 @@
+name: APK bouwen
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
+
+      - name: Ondertekensleutel klaarzetten (uit de geheimen)
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then echo "::error::Geheim KEYSTORE_B64 ontbreekt"; exit 1; fi
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/zangcoach.p12"
+          echo "KEYSTORE_FILE=$RUNNER_TEMP/zangcoach.p12" >> "$GITHUB_ENV"
+
+      - name: APK bouwen
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: gradle assembleRelease --no-daemon --stacktrace
+
+      - name: Controleren dat het dezelfde sleutel is als de oude app
+        run: |
+          BT=$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)
+          APK=app/build/outputs/apk/release/app-release.apk
+          "$ANDROID_HOME/build-tools/$BT/apksigner" verify --print-certs "$APK" | tee certs.txt
+          grep -qi "cb1b4638ece741402d09e79e391287ed38bfc61d5a38b4413ab8a61a11a5368f" certs.txt \
+            || { echo "::error::Verkeerde sleutel: deze APK zou niet over de oude app installeren"; exit 1; }
+          cp "$APK" "zangcoach-${{ github.run_number }}.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zangcoach-apk
+          path: zangcoach-*.apk
+
+      - name: Klaarzetten om te downloaden (Releases)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Zangcoach build ${{ github.run_number }}
+          files: zangcoach-*.apk
