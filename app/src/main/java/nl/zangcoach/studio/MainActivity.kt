@@ -4,6 +4,8 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Intent
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -22,6 +24,13 @@ class MainActivity : Activity() {
 
     private lateinit var web: WebView
     private var fileCallback: ValueCallback<Array<Uri>>? = null
+    private lateinit var audio: AudioManager
+
+    // Bluetooth-koptelefoon + microfoon: Android schakelt dan over naar "bellen-modus"
+    // (lage kwaliteit, haperend geluid, mic van de koptelefoon). Wij zetten dat meteen terug:
+    // muziek blijft in goede kwaliteit naar de koptelefoon, opnemen gebeurt met de mic van de gsm.
+    private val modeListener = AudioManager.OnModeChangedListener { keepMusicQuality() }
+    private val commDeviceListener = AudioManager.OnCommunicationDeviceChangedListener { keepMusicQuality() }
 
     companion object {
         private const val PICK_FILE = 42
@@ -33,6 +42,12 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
+        audio = getSystemService(AudioManager::class.java)
+        if (Build.VERSION.SDK_INT >= 31) {
+            audio.addOnModeChangedListener(mainExecutor, modeListener)
+            audio.addOnCommunicationDeviceChangedListener(mainExecutor, commDeviceListener)
+        }
 
         val perms = mutableListOf(Manifest.permission.RECORD_AUDIO)
         if (Build.VERSION.SDK_INT >= 33) perms += Manifest.permission.POST_NOTIFICATIONS
@@ -48,6 +63,9 @@ class MainActivity : Activity() {
         web.webChromeClient = object : WebChromeClient() {
             override fun onPermissionRequest(request: PermissionRequest) {
                 request.grant(request.resources)
+                // net na het openen van de microfoon nog eens nakijken
+                web.postDelayed({ keepMusicQuality() }, 300)
+                web.postDelayed({ keepMusicQuality() }, 1500)
             }
 
             // <input type="file"> in de pagina: de bestandskiezer van Android openen
@@ -74,6 +92,32 @@ class MainActivity : Activity() {
         setContentView(web)
     }
 
+    private fun isBluetooth(d: AudioDeviceInfo?): Boolean = d != null && (
+        d.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+            d.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+            (Build.VERSION.SDK_INT >= 31 && d.type == AudioDeviceInfo.TYPE_BLE_HEADSET)
+        )
+
+    /** Bellen-modus via Bluetooth uitzetten, zodat de muziek niet hapert. */
+    @Suppress("DEPRECATION")
+    private fun keepMusicQuality() {
+        try {
+            if (Build.VERSION.SDK_INT >= 31) {
+                val comm = audio.communicationDevice
+                if (isBluetooth(comm) || (audio.mode == AudioManager.MODE_IN_COMMUNICATION &&
+                        audio.getDevices(AudioManager.GET_DEVICES_OUTPUTS).any { isBluetooth(it) })
+                ) {
+                    audio.clearCommunicationDevice()
+                    if (audio.mode != AudioManager.MODE_NORMAL) audio.mode = AudioManager.MODE_NORMAL
+                }
+            } else if (audio.isBluetoothScoOn) {
+                audio.stopBluetoothSco()
+                audio.isBluetoothScoOn = false
+                audio.mode = AudioManager.MODE_NORMAL
+            }
+        } catch (_: Exception) { }
+    }
+
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
@@ -91,6 +135,10 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        if (Build.VERSION.SDK_INT >= 31) {
+            audio.removeOnModeChangedListener(modeListener)
+            audio.removeOnCommunicationDeviceChangedListener(commDeviceListener)
+        }
         PlaybackService.stop(this)
         web.destroy()
         super.onDestroy()
