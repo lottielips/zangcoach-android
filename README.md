@@ -18,3 +18,11 @@ De bouw controleert dat het certificaat hetzelfde is als dat van de oude app (SH
 anders kan de APK niet over de oude app geïnstalleerd worden.
 
 versionCode moet altijd hoger zijn dan de vorige (oude app eindigde op 17).
+
+## Versies
+- **3.1** – Sampler (tabblad Beat): eigen geluiden uit een bestand, de microfoon, een zangopname of een mix-opname;
+  in plakjes hakken (op de slagen of gelijk), omgekeerd, begin/einde. Plakjes spelen op een drumrij
+  (`P.kit[rij]='u:<id>'`, plakje per vakje in `P.dslc`, standaard in `P.dsl`). Geluiden in IndexedDB
+  `zangcoach-samples` (stores `meta` en `pcm`, één bibliotheek voor alle nummers), mee in de back-up (`samples`).
+- **3.0.1** – Bluetooth: geen "bellen-modus" als de microfoon aangaat.
+- **3.0** – Overstap naar Kotlin + GitHub Actions.
