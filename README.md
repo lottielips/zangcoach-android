@@ -28,6 +28,11 @@ eindpoort dicht, worden galm/echo vervangen door verse (`flushTails`) en wordt d
 (`ctxSleep`). Elke klank of tik maakt hem wakker (`ctxWake`). De planner (`sched`) tikt via een Worker
 (`startTimer`) en plant met het scherm uit 1,5 s vooruit; na een hapering slaat hij gemiste stappen over.
 
+## Versies
+- **3.2** – Geen ruis meer na het afspelen: eindpoort + uitklinken + afsluiten, vinylkraak alleen tijdens het
+  afspelen, galm/echo leeg na het afsluiten. Planner met eigen klok (Worker), verder vooruit met het scherm uit,
+  inhaalregel na een hapering. `play()` kan niet dubbel starten; een snelle start die nog laadt, begint niet
+  meer als je intussen stopte. Niveauregeling rust als de motor stilligt.
 - **3.1.2** – Geen ruis bij het openen: samples laden zonder de geluidsmotor te starten (AudioBuffer pas bij afspelen, `smpBuf`);
   stilleggen na 6 s zonder klank.
 - **3.1.1** – Geen ruis meer na de sampler: de microfoon gaat na een sampler-opname weer uit; de geluidsmotor
