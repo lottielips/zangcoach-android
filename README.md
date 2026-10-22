@@ -7,6 +7,8 @@ De Kotlin-code in `app/src/main/java/nl/zangcoach/studio/` is de schil eromheen:
   microfoon, bestanden kiezen, terug-knop stuurt naar de achtergrond.
 - `Bridge.kt` – `window.ZangcoachApp`: `saveAudio` (naar Download/Zangcoach), `share`, `playing`, `features`.
 - `PlaybackService.kt` – houdt de app wakker zolang er muziek speelt.
+- `NativeMic.kt` – eigen microfoon (AudioRecord, ingebouwde mic, gewone modus): `micStart`, `micRead`, `micStop`.
+  Zo zet Chromium een Bluetooth-koptelefoon niet in bellen-modus (SCO) tijdens het opnemen.
 
 ## Bouwen
 Elke push naar `main` bouwt automatisch een ondertekende APK (GitHub Actions).
@@ -29,6 +31,10 @@ eindpoort dicht, worden galm/echo vervangen door verse (`flushTails`) en wordt d
 (`startTimer`) en plant met het scherm uit 1,5 s vooruit; na een hapering slaat hij gemiste stappen over.
 
 ## Versies
+- **3.9** – Opnemen met een Bluetooth-koptelefoon: de app neemt zelf op via `NativeMic` (ingebouwde microfoon,
+  UNPROCESSED of VOICE_RECOGNITION, gewone modus) i.p.v. getUserMedia, dat Chromium naar SCO liet schakelen.
+  De pagina haalt de stukjes op (`startNativeMic`, AudioWorklet `zc-native-in`, 0,1 s buffer die `ioLatency`
+  meerekent). Valt terug op getUserMedia als het niet lukt. De bellen-modus-truc uit 3.0.1 is weg.
 - **3.8** – Melodieraster om te tekenen (`setupMelDraw`, pointer events): tik = noot, tik+schuif = lengte trekken,
   slepen vanaf het begin = verplaatsen, slepen aan het einde = lengte, lang drukken = weg. Vakjes die bij het
   akkoord van dat moment passen, kleuren groen (`paintMel`), akkoordnamen bovenaan. Op een smal scherm één maat

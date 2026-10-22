@@ -58,7 +58,18 @@ class Bridge(private val activity: MainActivity) {
         }
     }
 
+    /** Eigen microfoon starten (ingebouwde mic, gewone modus). Geeft "ok" of een foutmelding. */
+    @JavascriptInterface
+    fun micStart(sampleRate: Int): String = activity.mic.start(sampleRate)
+
+    /** Wat de microfoon sinds de vorige keer opnam: 16-bit PCM mono, base64. */
+    @JavascriptInterface
+    fun micRead(): String = activity.mic.read()
+
+    @JavascriptInterface
+    fun micStop() { activity.mic.stop() }
+
     /** Laat de pagina weten welke extra's deze schil kan. */
     @JavascriptInterface
-    fun features(): String = "save,share,playing,pick"
+    fun features(): String = "save,share,playing,pick,mic"
 }

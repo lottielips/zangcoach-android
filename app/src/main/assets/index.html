@@ -2365,7 +2365,9 @@ function humNotes(steps,mapRow){
 function ioLatency(){
   const c=S.ctx;
   const out=(c.outputLatency&&c.outputLatency>0)?c.outputLatency:((c.baseLatency||0.01)+0.02);
-  return out+0.025;
+  // eigen microfoon: de buffer in de worklet + ophalen (gemiddeld een halve ophaalbeurt) + Android zelf
+  const nin=S.nmic?Math.max(0,Math.min(0.4,S.nmicBuf==null?0.1:S.nmicBuf))+0.0075+0.015:0;
+  return out+0.025+nin;
 }
 // bij inneuriën komt daar nog het halve meetvenster van de toonhoogtemeter bij
 function humLatency(){return ioLatency()+1024/S.ctx.sampleRate;}
@@ -2560,15 +2562,59 @@ async function downloadRec(r,btn){
 }
 
 /* ---------- microfoon en toonhoogte ---------- */
+// In de app: eigen microfoon van de schil (ingebouwde mic, gewone modus). Zo schakelt een Bluetooth-
+// koptelefoon niet naar "bellen-modus" (dun, haperend geluid). De stukjes geluid komen binnen via
+// ZangcoachApp.micRead() en worden door een AudioWorklet weer een gewone geluidsbron.
+const NIN_SRC=`class ZcNativeIn extends AudioWorkletProcessor{
+  constructor(){super();this.q=[];this.cur=null;this.pos=0;this.buf=0;this.on=false;this.n=0;this.target=Math.round(sampleRate*0.1);
+    this.port.onmessage=e=>{const a=new Int16Array(e.data);if(a.length){this.q.push(a);this.buf+=a.length;}};}
+  process(ins,outs){
+    const out=outs[0][0];
+    if(!this.on){if(this.buf>=this.target)this.on=true;else{out.fill(0);if(++this.n%50===0)this.port.postMessage(this.buf/sampleRate);return true;}}
+    while(this.buf>this.target+sampleRate*0.15&&this.q.length>1){this.buf-=this.q.shift().length;}
+    for(let k=0;k<out.length;k++){
+      if(!this.cur||this.pos>=this.cur.length){this.cur=this.q.shift()||null;this.pos=0;if(!this.cur){out.fill(0,k);this.on=false;break;}}
+      out[k]=this.cur[this.pos++]/32768;this.buf--;
+    }
+    if(++this.n%50===0)this.port.postMessage(this.buf/sampleRate);
+    return true;
+  }
+}
+registerProcessor('zc-native-in',ZcNativeIn);`;
+async function startNativeMic(){
+  const c=S.ctx;
+  try{
+    if(!S.ninLoaded){await c.audioWorklet.addModule(URL.createObjectURL(new Blob([NIN_SRC],{type:'application/javascript'})));S.ninLoaded=true;}
+    const res=window.ZangcoachApp.micStart(c.sampleRate);
+    if(res!=='ok'){S.nmicErr=res;return null;}
+    const node=new AudioWorkletNode(c,'zc-native-in',{numberOfInputs:0,numberOfOutputs:1,outputChannelCount:[1]});
+    node.port.onmessage=e=>{S.nmicBuf=e.data;};
+    S.nmic=node;S.nmicBuf=0.1;
+    const pull=()=>{if(S.nmic!==node)return;let b='';try{b=window.ZangcoachApp.micRead();}catch(e){}if(b){const ab=b64ToAb(b);node.port.postMessage(ab,[ab]);}};
+    S.nmicT=setInterval(pull,15);
+    // ook als MediaStream (voor de sampler, die met MediaRecorder opneemt)
+    const md=c.createMediaStreamDestination();node.connect(md);S.stream=md.stream;
+    return node;
+  }catch(e){S.nmicErr=e&&e.message||String(e);try{window.ZangcoachApp.micStop();}catch(_){}S.nmic=null;return null;}
+}
+function stopNativeMic(){
+  if(!S.nmic)return;
+  clearInterval(S.nmicT);try{window.ZangcoachApp.micStop();}catch(e){}
+  try{S.nmic.disconnect();}catch(e){}S.nmic=null;
+}
 async function startMic(){
   try{
-    if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
-      msg('De microfoon werkt alleen op een https-pagina of op localhost.',true);return;
-    }
     ensureCtx();await S.ctx.resume();
-    const android=/Android/i.test(navigator.userAgent);
-    S.stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:!android,noiseSuppression:false,autoGainControl:false,channelCount:1}});
-    const src=S.ctx.createMediaStreamSource(S.stream);
+    let src=null;
+    if(window.ZangcoachApp&&window.ZangcoachApp.micStart&&S.ctx.audioWorklet&&window.AudioWorkletNode)src=await startNativeMic();
+    if(!src){
+      if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+        msg('De microfoon werkt alleen op een https-pagina of op localhost.',true);return;
+      }
+      const android=/Android/i.test(navigator.userAgent);
+      S.stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:!android,noiseSuppression:false,autoGainControl:false,channelCount:1}});
+      src=S.ctx.createMediaStreamSource(S.stream);
+    }
     S.analyser=S.ctx.createAnalyser();S.analyser.fftSize=2048;
     src.connect(S.analyser);
     S.buf=new Float32Array(2048);S.running=true;S.src=src;
@@ -2580,6 +2626,7 @@ async function startMic(){
 }
 function stopMic(){
   S.running=false;
+  stopNativeMic();
   if(S.stream) S.stream.getTracks().forEach(t=>t.stop());
   S.stream=null;S.analyser=null;S.src=null;S.nowMidi=null;
   $('micBtn').textContent='Microfoon aan';$('micBtn').classList.add('primary');
