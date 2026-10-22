@@ -29,6 +29,9 @@ eindpoort dicht, worden galm/echo vervangen door verse (`flushTails`) en wordt d
 (`startTimer`) en plant met het scherm uit 1,5 s vooruit; na een hapering slaat hij gemiste stappen over.
 
 ## Versies
+- **3.7** – Fades per spoor (mixer → ▾ Fade): fade-tijd in tellen/maten (`P.mix[b].fd`, `fadeSecs`), Dempen fadet
+  mee, knoppen Fade uit/in; curve met gelijk vermogen (`fadeBus`, setValueCurveAtTime). applyMix laat een lopende
+  fade met rust (`S.fadeUntil`).
 - **3.6.1** – Extra sporen kunnen ook een bas zijn (`P.mel[t].kind='bas'`: 8 rijen, volgt de akkoorden, basklanken
   eerst; `isBass`, `rowsOf`, `trName`). Tot 3 extra sporen (C, D, E).
 - **3.6** – Lagen die tegelijk spelen: tot 3 beats (`P.dlay`/`P.dcur`, sporen `drums`, `drums2`, `drums3`), tot 3

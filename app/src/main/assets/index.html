@@ -1714,7 +1714,7 @@ function applyMix(){
   for(const b in S.bus){
     const m=mixOf(b);
     // een spoor van een laag die er (in dit deel) niet is, zwijgt
-    S.bus[b].g.gain.setTargetAtTime(m.m||!inUse.has(b)?0:m.v,t,0.02);
+    if(!(S.fadeUntil&&S.fadeUntil[b]>t))S.bus[b].g.gain.setTargetAtTime(m.m||!inUse.has(b)?0:m.v,t,0.02);
     S.bus[b].r.gain.setTargetAtTime(m.r,t,0.02);
     S.bus[b].d.gain.setTargetAtTime(m.d,t,0.02);
   }
@@ -3320,7 +3320,7 @@ function renderMixer(){
   if(P.parts){const mp=$('mixPart');mp.textContent='Mix van: '+P.parts[P.cur].name;mp.style.setProperty('--pc',partCol(P.cur));}
   for(const b of allBuses()){
     const m=P.mix[b]||(P.mix[b]=mixDefault(b)),row=document.createElement('div');row.className='mixrow';
-    row.innerHTML='<div class="mixname"><b>'+busName(b)+'</b><button type="button" class="btn sm mute">'+(m.m?'Gedempt':'Dempen')+'</button></div>'+
+    row.innerHTML='<div class="mixname"><b>'+busName(b)+'</b><button type="button" class="btn sm mute">'+muteLabel(b,m)+'</button></div>'+
       '<div class="mixsl">'+
       '<label>Volume<input type="range" min="0" max="200" data-k="v" value="'+Math.round(m.v*100)+'"></label>'+
       '<label>Galm<input type="range" min="0" max="100" data-k="r" value="'+Math.round(m.r*100)+'"></label>'+
@@ -3329,7 +3329,24 @@ function renderMixer(){
       '<label>Hoeveel<input type="range" min="0" max="100" data-k="fa" value="'+Math.round((m.fa==null?0.5:m.fa)*100)+'"></label>'+
       '<label>Links ↔ rechts<input type="range" min="-100" max="100" step="5" data-k="p" value="'+Math.round((m.p||0)*100)+'"></label></div>';
     const mb=row.querySelector('.mute');mb.classList.toggle('on',m.m);
-    mb.onclick=()=>{m.m=!m.m;save();applyMix();renderMixer();};
+    mb.onclick=()=>fadeBus(b,!m.m);
+    // uitklapbaar: fade-tijd en knoppen om uit of in te faden
+    const fbtn=document.createElement('button');fbtn.type='button';fbtn.className='btn sm';
+    const fopen=S.fadeOpen&&S.fadeOpen[b];fbtn.textContent=(fopen?'▴':'▾')+' Fade'+(m.fd&&m.fd!=='0'?' ('+fadeName(m.fd)+')':'');
+    row.querySelector('.mixname').appendChild(fbtn);
+    const fb=document.createElement('div');fb.className='mixrack mixfade';fb.hidden=!fopen;
+    fbtn.onclick=()=>{S.fadeOpen=S.fadeOpen||{};S.fadeOpen[b]=!S.fadeOpen[b];renderMixer();};
+    if(fopen){
+      fb.innerHTML='<div class="f"><span>Hoe lang duurt de fade (ook bij Dempen)</span><div class="chips fch" style="margin:0"></div></div>'+
+        '<div class="row" style="margin-top:10px"><button type="button" class="btn sm fout">↘ Fade uit</button><button type="button" class="btn sm fin">↗ Fade in</button></div>'+
+        '<p class="hint" style="margin:6px 0 0">De fade volgt je tempo: "2 maten" eindigt precies op de tel. Zo laat je een spoor langzaam verdwijnen of binnenkomen, ook tijdens het opnemen.</p>';
+      const ch=fb.querySelector('.fch');
+      FADES.forEach(([v,n])=>{const c=document.createElement('button');c.type='button';c.className='chip'+((m.fd||'0')===v?' on':'');c.textContent=n;c.onclick=()=>{m.fd=v;save();renderMixer();};ch.appendChild(c);});
+      const fo=fb.querySelector('.fout'),fi=fb.querySelector('.fin');
+      fo.disabled=m.m;fi.disabled=!m.m;
+      fo.onclick=()=>fadeBus(b,true,m.fd&&m.fd!=='0'?m.fd:'m2');
+      fi.onclick=()=>fadeBus(b,false,m.fd&&m.fd!=='0'?m.fd:'m2');
+    }
     // uitklapbaar: alle klankschuiven en EQ van dit spoor
     const more=document.createElement('button');more.type='button';more.className='btn sm';
     const open=S.mixOpen&&S.mixOpen[b];more.textContent=open?'▴ Klank & EQ':'▾ Klank & EQ';
@@ -3342,7 +3359,7 @@ function renderMixer(){
     fs.value=m.fx||'geen';row.querySelector('[data-k=fa]').disabled=fs.value==='geen';
     fs.onchange=e=>{m.fx=e.target.value;if(m.fa==null)m.fa=0.5;row.querySelector('[data-k=fa]').disabled=m.fx==='geen';save();applyMix();};
     row.querySelectorAll('input[data-k]').forEach(inp=>inp.oninput=e=>{m[e.target.dataset.k]=e.target.value/100;save();applyMix();});
-    row.appendChild(rb);
+    row.appendChild(fb);row.appendChild(rb);
     box.appendChild(row);
   }
 }
@@ -5722,6 +5739,30 @@ function setupLayers(){
   $('trackAdd').onclick=()=>addTrack('mel');$('trackAddBass').onclick=()=>addTrack('bas');
   $('trackDel').onclick=()=>{const d=$('trackDel');if(d.dataset.sure!=='1'){d.dataset.sure='1';d.textContent='Zeker? Tik nog eens';setTimeout(()=>{d.dataset.sure='';d.textContent='Verwijder spoor';},4000);return;}d.dataset.sure='';d.textContent='Verwijder spoor';removeTrack();};
   renderBeatLayers();renderChordLayers();renderTrackSeg();
+}
+
+
+/* ---------- fades per spoor ---------- */
+// Dempen (of de knoppen in het Fade-menu) laat een spoor in de maat uit- of infaden, met een zachte curve
+// (gelijk vermogen: geen gat in het midden, geen plots einde).
+const FADES=[['0','Direct'],['b1','1 tel'],['m1','1 maat'],['m2','2 maten'],['m4','4 maten'],['m8','8 maten']];
+function fadeName(c){const f=FADES.find(x=>x[0]===c);return f?f[1]:'';}
+function fadeSecs(c){if(!c||c==='0')return 0;const beat=60/P.bpm,bar=barSteps()/4*beat;return c==='b1'?beat:bar*(+c.slice(1));}
+function muteLabel(b,m){const t=S.ctx&&S.fadeUntil&&S.fadeUntil[b]>S.ctx.currentTime;if(t)return m.m?'↘ Fadet uit…':'↗ Fadet in…';return m.m?'Gedempt':'Dempen';}
+function fadeBus(b,toMute,code){
+  const m=P.mix[b];if(!m)return;
+  m.m=toMute;save();
+  const dur=fadeSecs(code!=null?code:m.fd);
+  if(!S.ctx||!S.bus[b]||dur<=0){if(S.fadeUntil)S.fadeUntil[b]=0;applyMix();renderMixer();return;}
+  ensureCtx();
+  const g=S.bus[b].g.gain,t=S.ctx.currentTime+0.01,from=g.value,to=toMute?0:m.v,n=96,cv=new Float32Array(n);
+  for(let i=0;i<n;i++){const x=i/(n-1),c=toMute?Math.cos(x*Math.PI/2):1-Math.sin(x*Math.PI/2);cv[i]=to+(from-to)*c;}
+  g.cancelScheduledValues(0);g.setValueAtTime(from,S.ctx.currentTime);g.setValueCurveAtTime(cv,t,dur);
+  S.fadeUntil=S.fadeUntil||{};S.fadeUntil[b]=t+dur+0.02;S.ctxTouch=performance.now()+dur*1000;
+  renderMixer();
+  msg(busName(b)+(toMute?' fadet uit':' fadet in')+' over '+fadeName(code!=null?code:m.fd)+'.');
+  clearTimeout((S.fadeT=S.fadeT||{})[b]);
+  S.fadeT[b]=setTimeout(()=>{S.fadeUntil[b]=0;applyMix();if(S.tab==='mix')renderMixer();},dur*1000+80);
 }
 
 function tick(ts){
