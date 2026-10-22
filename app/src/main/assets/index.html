@@ -271,6 +271,8 @@ input[type=range]{width:100%;accent-color:var(--amber)}
 .seqgraph canvas{position:absolute;inset:0;width:100%;height:100%}
 .seqgraph p{position:absolute;inset:0;display:grid;place-items:center;margin:0;font-size:13px;color:var(--muted);text-align:center;padding:0 14px}
 .lbar{gap:10px}
+#trackSeg{max-width:100%;overflow-x:auto;scrollbar-width:none}
+#trackSeg button{white-space:nowrap;padding:8px 12px;flex:0 0 auto}
 .lbar .chip.on{font-weight:700}
 .songstrip{display:flex;flex-wrap:wrap;gap:6px;min-height:34px;align-items:center}
 .songstrip button{border:1px solid var(--pc);background:color-mix(in srgb,var(--pc) 22%,var(--panel2));border-radius:8px;padding:6px 10px;font:600 13px inherit;color:inherit}
@@ -511,6 +513,7 @@ input[type=range]{width:100%;accent-color:var(--amber)}
       <div class="row" style="margin-bottom:12px">
         <div class="seg" role="group" aria-label="Spoor" id="trackSeg"></div>
         <button id="trackAdd" class="btn sm" type="button">＋ Melodie</button>
+        <button id="trackAddBass" class="btn sm" type="button">＋ Bas</button>
         <button id="trackDel" class="btn sm" type="button" hidden>Verwijder spoor</button>
         <span class="spacer"></span>
         <button id="humBtn" class="btn sm rec" type="button">🎤 Neurie in</button>
@@ -1365,7 +1368,8 @@ const INST={};INSTLIST.forEach(x=>INST[x.id]=x.n);
 const IGROUPS=['Akoestisch','Experimenteel','Synths','Toetsen','Gitaar','Blazers & stem','Bas'];
 const LIVEKEYS=['z','x','c','v','b','n','m',','];
 const MEL_SCALE={major:[0,2,4,5,7,9,11],minor:[0,2,3,5,7,8,10]};
-const ROWS={A:15,B:8,C:15,D:15};
+function rowsOf(tr){return isBass(tr)?8:15;}
+function isBass(tr){return tr==='B'||!!(P.mel&&P.mel[tr]&&P.mel[tr].kind==='bas');}
 const DEG=['1','2','3','4','5','6','7'];
 
 // Patronen als tekst: x = hard, o = zacht, . = uit.
@@ -2279,7 +2283,7 @@ function hitKey(r){
   ensureCtx();S.ctx.resume();
   const tr=S.track,T=P.mel[tr],key=musicKey();
   const ch=S.playing?S.chords[S.curIdx]||S.chords[0]:S.chords[0];
-  synth(T.inst,rowMidi(tr,r,key,ch),S.ctx.currentTime+0.005,Math.max(0.25,T.len*(S.sd||0.17)),tr==='B'?0.16:0.12,S.bus[tr].in);
+  synth(T.inst,rowMidi(tr,r,key,ch),S.ctx.currentTime+0.005,Math.max(0.25,T.len*(S.sd||0.17)),isBass(tr)?0.16:0.12,dest(tr));
   const el=document.querySelector('.pad.note[data-r="'+r+'"]');
   if(el){el.classList.add('hit');setTimeout(()=>el.classList.remove('hit'),130);}
   if(S.liveRec&&S.playing){
@@ -2363,7 +2367,7 @@ function applyHum(L,nudgeMs){
   const pitches=steps.filter(x=>x.v).map(x=>x.m);
   if(!pitches.length)return null;
   // één octaafverschuiving voor de hele frase, zodat ze in het raster past
-  const key=musicKey(),rows=ROWS[L.tr],ch0=chordAtStep(L.startStep);
+  const key=musicKey(),rows=rowsOf(L.tr),ch0=chordAtStep(L.startStep);
   // kies de verschuiving waarbij de meeste noten in het raster passen; bij gelijkspel de kleinste
   const lo=rowMidi(L.tr,0,key,ch0)-1,hi=rowMidi(L.tr,rows-1,key,ch0)+1;
   let k=0,best=-1;
@@ -2416,7 +2420,7 @@ function nudgeHum(ms){
   if(notes){P.mel[L.tr].notes=notes;save();renderMelGrid();}
 }
 function nearestRow(tr,midi,step){
-  const key=musicKey(),ch=chordAtStep(step),rows=ROWS[tr];
+  const key=musicKey(),ch=chordAtStep(step),rows=rowsOf(tr);
   const lo=rowMidi(tr,0,key,ch),hi=rowMidi(tr,rows-1,key,ch);
   let m=midi;while(m>hi+3)m-=12;while(m<lo-3)m+=12;
   let best=0,bd=1e9;
@@ -2846,7 +2850,7 @@ function renderDrumGrid(){
   });
 }
 function renderMelGrid(){
-  const tr=S.track,T=P.mel[tr],N=patLen(),rows=ROWS[tr],box=$('melGrid');
+  const tr=S.track,T=P.mel[tr],N=patLen(),rows=rowsOf(tr),box=$('melGrid');
   box.innerHTML='';melCells=[];
   box.style.gridTemplateColumns='44px repeat('+N+',minmax(15px,1fr))';
   const key=musicKey();
@@ -2878,7 +2882,7 @@ function melTap(s,r){
     T.notes.forEach(n=>{if(n.r===r&&n.s>s&&n.s<s+l)l=n.s-s;});
     T.notes.push({s,r,l});
     ensureCtx();S.ctx.resume();
-    if(!S.playing)synth(T.inst,rowMidi(tr,r,musicKey(),chordAtStep(s)),S.ctx.currentTime+0.005,Math.min(0.6,l*0.15),tr==='B'?0.16:0.12,S.bus[tr].in);
+    if(!S.playing)synth(T.inst,rowMidi(tr,r,musicKey(),chordAtStep(s)),S.ctx.currentTime+0.005,Math.min(0.6,l*0.15),isBass(tr)?0.16:0.12,dest(tr));
   }
   save();renderMelGrid();
 }
@@ -2891,7 +2895,7 @@ function renderMelLabels(){
   });
 }
 function renderKeys(){
-  const tr=S.track,box=$('keys'),key=musicKey(),rows=Math.min(ROWS[tr],8);
+  const tr=S.track,box=$('keys'),key=musicKey(),rows=Math.min(rowsOf(tr),8);
   box.innerHTML='';
   for(let r=0;r<rows;r++){
     const b=document.createElement('button');b.type='button';
@@ -2915,12 +2919,12 @@ function renderMel(){
   document.querySelectorAll('.seg button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.tr===S.track)));
   if(!P.mel[S.track])S.track='A';
   renderTrackSeg();
-  $('melTitle').textContent=TRN[S.track];
+  $('melTitle').textContent=trName(S.track);
   $('humFix').hidden=!(S.lastHum&&S.lastHum.tr===S.track);
-  if(S.fillInst&&S.instFor!==S.track){S.fillInst($('instSel'),S.track==='B'?['Bas','Experimenteel','Akoestisch','Synths','Toetsen','Gitaar','Blazers & stem']:['Akoestisch','Experimenteel','Synths','Toetsen','Gitaar','Blazers & stem','Bas']);S.instFor=S.track;}
+  if(S.fillInst&&S.instFor!==S.track){S.fillInst($('instSel'),isBass(S.track)?['Bas','Experimenteel','Akoestisch','Synths','Toetsen','Gitaar','Blazers & stem']:['Akoestisch','Experimenteel','Synths','Toetsen','Gitaar','Blazers & stem','Bas']);S.instFor=S.track;}
   $('instSel').value=T.inst;$('colSel').value=P.color[S.track]||'normaal';$('octVal').textContent=T.oct;$('lenSel').value=String(T.len);$('followCb').checked=!!T.follow;$('feel').value=T.feel==null?40:T.feel;$('feelVal').textContent=T.feel==null?40:T.feel;$('glideCb').checked=!!T.glide;
   renderVars();renderMelGrid();renderKeys();
-  $('rackTitle').textContent='Klank van '+(S.track==='B'?'de bas':S.track==='A'?'de melodie':TRN[S.track]);renderRack($('melRack'),S.track);renderRack($('chordRack'),curChordBus());
+  $('rackTitle').textContent='Klank van '+(S.track==='B'?'de bas':S.track==='A'?'de melodie':trName(S.track));renderRack($('melRack'),S.track);renderRack($('chordRack'),curChordBus());
 }
 function renderMelAll(){renderMel();}
 function markPos(pos,cpos){
@@ -3234,9 +3238,9 @@ function randomDrums(){
 }
 function randomMel(){
   pushUndo();
-  const tr=S.track,T=P.mel[tr],N=patLen(),rows=ROWS[tr],key=musicKey(),g=TS[P.ts].g,b=barSteps();
+  const tr=S.track,T=P.mel[tr],N=patLen(),rows=rowsOf(tr),key=musicKey(),g=TS[P.ts].g,b=barSteps();
   const notes=[];
-  if(tr==='B'){
+  if(isBass(tr)){
     for(let s=0;s<N;s++){
       const bs=s%b;
       if(bs===0)notes.push({s,r:0,l:2+rnd(3)});
@@ -3288,7 +3292,7 @@ function applyScene(i){
   const pi=PROGS[mode].findIndex(x=>x.n===pn);P.prog=pi<0?0:pi;
   P.rhythm=sc.rhythm;P.chordInst=sc.chordInst;P.change=sc.change;
   P.mix=clone(p.mix);for(const b in sc.mix)Object.assign(P.mix[b],sc.mix[b]);
-  P.dlay=[];P.dcur=0;P.clay=[];P.ccur=0;delete P.mel.C;delete P.mel.D;if(!P.mel[S.track])S.track='A';
+  P.dlay=[];P.dcur=0;P.clay=[];P.ccur=0;delete P.mel.C;delete P.mel.D;delete P.mel.E;if(!P.mel[S.track])S.track='A';
   P.color=Object.assign({A:'normaal',B:'normaal',chords:'normaal'},sc.color||{});
   P.master=Object.assign(clone(p.master),sc.master);
   save();
@@ -3310,7 +3314,7 @@ function renderScenes(){
 }
 
 /* ---------- mixer ---------- */
-const BUSN={drums:'Drums',drums2:'Beat 2',drums3:'Beat 3',chords:'Akkoorden',chords2:'Akkoorden 2',chords3:'Akkoorden 3',A:'Melodie',B:'Bas',C:'Melodie 2',D:'Melodie 3',V:'Zang (alle sporen)'};
+const BUSN={E:'Melodie 4',drums:'Drums',drums2:'Beat 2',drums3:'Beat 3',chords:'Akkoorden',chords2:'Akkoorden 2',chords3:'Akkoorden 3',A:'Melodie',B:'Bas',C:'Melodie 2',D:'Melodie 3',V:'Zang (alle sporen)'};
 function renderMixer(){
   const box=$('mixer');box.innerHTML='';
   if(P.parts){const mp=$('mixPart');mp.textContent='Mix van: '+P.parts[P.cur].name;mp.style.setProperty('--pc',partCol(P.cur));}
@@ -3448,7 +3452,7 @@ function accentAt(bpos){
   return bpos%2===0?0.8:0.7;
 }
 function playNote(tr,T,nt,nts,step,pos,bpos,t,sd,key,ch,out){
-  const fe=(T.feel==null?40:T.feel)/100,base=tr==='B'?0.16:0.12;
+  const fe=(T.feel==null?40:T.feel)/100,base=isBass(tr)?0.16:0.12;
   const acc=1-fe*(1-accentAt(bpos)),vf=acc*(1+(Math.random()*2-1)*0.1*fe);
   const midi=rowMidi(tr,nt.r,key,ch);
   let from=null,dur=nt.l*sd*0.98;
@@ -3875,7 +3879,7 @@ function addVar(mode){
   if(mode==='vary'&&!T.notes.length){msg('Deze variant is nog leeg. Zet eerst een paar noten, dan maak ik er een variatie op.');return;}
   pushUndo();syncMel(P.mel);
   const from=VARL[T.ed];
-  const nn=mode==='leeg'?[]:mode==='vary'?varyMel(T.notes,ROWS[tr],patLen(),tr):clone(T.notes);
+  const nn=mode==='leeg'?[]:mode==='vary'?varyMel(T.notes,rowsOf(tr),patLen(),tr):clone(T.notes);
   T.vars.push(nn);const i=T.vars.length-1;
   const added=T.seq.length<SEQMAX;if(added)T.seq.push(i);
   T.ed=i;T.notes=T.vars[i];save();renderMel();
@@ -5589,7 +5593,9 @@ function setupSeq(){
 // Beat en akkoorden: de laag die je bewerkt, staat gewoon in P (zo blijft alle bestaande code werken);
 // de andere lagen staan in P.dlay / P.clay (op de plek van de gekozen laag staat null) en worden tijdens
 // het afspelen per stap even ingewisseld (withBeat / withChord). Melodie: extra sporen C en D in P.mel.
-const MELTR=['A','B','C','D'],TRN={A:'Melodie',B:'Bas',C:'Melodie 2',D:'Melodie 3'};
+const MELTR=['A','B','C','D','E'],TRN={A:'Melodie',B:'Bas'};
+// extra sporen heten 'Melodie 2', 'Bas 2', … naargelang hun soort en volgorde
+function trName(t){if(TRN[t])return TRN[t];const T=P.mel&&P.mel[t];if(!T)return t;const bas=T.kind==='bas';let n=1;for(const x of melTracks()){if(x==='A'||x==='B')continue;if(x===t)break;if((P.mel[x].kind==='bas')===bas)n++;}return (bas?'Bas ':'Melodie ')+(n+1);}
 const BEAT_KEYS=['drums','dmute','kit','dprob','drat','dtune','ddec','dvol','dpan','drev','dsl','dslc','dstn','dsln','drgl','dvar'];
 const CHORD_KEYS=['rhythm','chordInst','chordFeel','twin'];
 const LMAX=3;
@@ -5602,9 +5608,9 @@ function curBeatBus(){return beatBus(nBeat()>1?P.dcur||0:0);}
 function curChordBus(){return chordBus(nChord()>1?P.ccur||0:0);}
 function beatIn(){const b=curBeatBus();ensureCtx();if(!S.bus[b])makeBus(S.ctx,b);return S.bus[b].in;}
 function allBuses(){const b=[];for(let i=0;i<nBeat();i++)b.push(beatBus(i));for(let i=0;i<nChord();i++)b.push(chordBus(i));return b.concat(melTracks(),['V']);}
-function busName(b){if(b==='drums'&&nBeat()>1)return 'Beat 1';if(b==='chords'&&nChord()>1)return 'Akkoorden 1';return BUSN[b]||b;}
-function mixDefault(b){const d=defaultProject().mix;if(d[b])return clone(d[b]);if(b.startsWith('drums'))return Object.assign(clone(d.drums),{v:0.7});if(b.startsWith('chords'))return Object.assign(clone(d.chords),{v:0.55});return clone(d.A);}
-function balTarget(b){return b==='drums'?-17:b.startsWith('drums')?-20:b==='chords'?-23:b.startsWith('chords')?-25:({A:-21,B:-19,C:-23,D:-23,V:-18})[b]||-22;}
+function busName(b){if(b==='drums'&&nBeat()>1)return 'Beat 1';if(b==='chords'&&nChord()>1)return 'Akkoorden 1';if(MELTR.includes(b)&&b!=='A'&&b!=='B')return trName(b);return BUSN[b]||b;}
+function mixDefault(b){const d=defaultProject().mix;if(d[b])return clone(d[b]);if(b.startsWith('drums'))return Object.assign(clone(d.drums),{v:0.7});if(b.startsWith('chords'))return Object.assign(clone(d.chords),{v:0.55});return clone(isBass(b)?d.B:d.A);}
+function balTarget(b){return b==='drums'?-17:b.startsWith('drums')?-20:b==='chords'?-23:b.startsWith('chords')?-25:(b==='V'?-18:b==='A'?-21:isBass(b)?(b==='B'?-19:-21):-23);}
 function withBeat(i,fn){
   const L=nBeat()>1&&i!==P.dcur?P.dlay[i]:null,prev=S.beatCtx;S.beatCtx=i;
   if(!L){try{return fn();}finally{S.beatCtx=prev;}}
@@ -5686,16 +5692,17 @@ function removeChordLayer(){
   save();renderChordAll();renderMixer();applyMix();msg('Akkoordlaag verwijderd.');
 }
 // --- melodiesporen ---
-function addTrack(){
-  const t=['C','D'].find(x=>!P.mel[x]);if(!t){msg('Hoogstens 4 sporen: melodie, bas, melodie 2 en melodie 3.');return;}
-  P.mel[t]={notes:[],inst:t==='C'?'rhodes':'strings',oct:t==='C'?4:5,len:2,follow:false,vars:[[]],seq:[0],ed:0,feel:40};
+function addTrack(kind){
+  const t=['C','D','E'].find(x=>!P.mel[x]);if(!t){msg('Hoogstens 3 extra sporen (naast de melodie en de bas).');return;}
+  P.mel[t]=kind==='bas'?{kind:'bas',notes:[],inst:'moog',oct:2,len:4,follow:true,vars:[[]],seq:[0],ed:0,feel:40}
+    :{kind:'mel',notes:[],inst:'rhodes',oct:4,len:2,follow:false,vars:[[]],seq:[0],ed:0,feel:40};
   P.mix[t]=mixDefault(t);P.color[t]='normaal';
   S.track=t;if(S.ctx)ensureBus(t);save();renderMel();renderMixer();preloadInst();
-  msg(TRN[t]+' gemaakt. Kies een klank en tik je noten in: hij speelt samen met de melodie en de bas.');
+  msg(trName(t)+' gemaakt. Kies een klank en tik je noten in: '+(kind==='bas'?'hij speelt samen met de andere bas, bv. een 808 onder een synthbas.':'hij speelt samen met de melodie en de bas.'));
 }
 function removeTrack(){
-  const t=S.track;if(t!=='C'&&t!=='D')return;
-  delete P.mel[t];delete P.mix[t];S.track='A';save();renderMel();renderMixer();applyMix();msg(TRN[t]+' verwijderd.');
+  const t=S.track;if(t==='A'||t==='B'||!P.mel[t])return;const nm=trName(t);
+  delete P.mel[t];delete P.mix[t];S.track='A';save();renderMel();renderMixer();applyMix();msg(nm+' verwijderd.');
 }
 function layerChips(box,n,cur,label,onSel,onAdd,onDel){
   box.innerHTML='';
@@ -5708,11 +5715,11 @@ function renderBeatLayers(){const b=$('beatLayers');if(b)layerChips(b,nBeat(),nB
 function renderChordLayers(){const b=$('chordLayers');if(b)layerChips(b,nChord(),nChord()>1?P.ccur:0,'Laag',selectChordLayer,addChordLayer,removeChordLayer);}
 function renderTrackSeg(){
   const box=$('trackSeg');if(!box)return;box.innerHTML='';
-  melTracks().forEach(t=>{const b=document.createElement('button');b.type='button';b.dataset.tr=t;b.textContent=TRN[t];b.setAttribute('aria-pressed',String(t===S.track));b.onclick=()=>{S.track=t;renderMel();};box.appendChild(b);});
-  $('trackAdd').hidden=melTracks().length>=4;$('trackDel').hidden=!(S.track==='C'||S.track==='D');
+  melTracks().forEach(t=>{const b=document.createElement('button');b.type='button';b.dataset.tr=t;b.textContent=trName(t);b.setAttribute('aria-pressed',String(t===S.track));b.onclick=()=>{S.track=t;renderMel();};box.appendChild(b);});
+  const full=melTracks().length>=MELTR.length;$('trackAdd').hidden=full;$('trackAddBass').hidden=full;$('trackDel').hidden=S.track==='A'||S.track==='B';
 }
 function setupLayers(){
-  $('trackAdd').onclick=addTrack;
+  $('trackAdd').onclick=()=>addTrack('mel');$('trackAddBass').onclick=()=>addTrack('bas');
   $('trackDel').onclick=()=>{const d=$('trackDel');if(d.dataset.sure!=='1'){d.dataset.sure='1';d.textContent='Zeker? Tik nog eens';setTimeout(()=>{d.dataset.sure='';d.textContent='Verwijder spoor';},4000);return;}d.dataset.sure='';d.textContent='Verwijder spoor';removeTrack();};
   renderBeatLayers();renderChordLayers();renderTrackSeg();
 }
@@ -5918,7 +5925,7 @@ function init(){
     const d=DRUMS.find(x=>x.key===k);
     if(d){hitPad(d.id);return;}
     const li=LIVEKEYS.indexOf(k);
-    if(li>=0&&li<ROWS[S.track]){hitKey(li);}
+    if(li>=0&&li<rowsOf(S.track)){hitKey(li);}
   });
   renderAll();
   requestAnimationFrame(tick);
