@@ -186,7 +186,14 @@ select{background:var(--panel2);border:1px solid var(--line);border-radius:8px;p
 .cell.now{outline:2px solid var(--good);outline-offset:0}
 .cell.sel{outline:2px solid var(--ink);outline-offset:1px;z-index:1}
 .cell.gs{margin-left:4px}
-.mgrid .cell{height:22px;border-radius:3px}
+.mgrid .cell{height:24px;border-radius:3px;touch-action:none;-webkit-user-select:none;user-select:none}
+.mgrid .cell.ct{background:color-mix(in srgb,var(--good) 16%,var(--panel2))}
+.mgrid .cell.ct.rowroot{background:color-mix(in srgb,var(--good) 24%,var(--panel2))}
+.mgrid .cell.msel{outline:2px solid var(--ink);outline-offset:-1px}
+.mgrid .cell.nend{box-shadow:inset -3px 0 0 color-mix(in srgb,var(--ink) 35%,transparent)}
+.mgrid .mhead{font:600 9px var(--f-mono);color:var(--muted);height:14px;overflow:visible;white-space:nowrap;align-self:end}
+.mgrid .mhead.chg{color:var(--good)}
+.mgrid .mhead.lab{padding:0}
 .mgrid .cell.rowroot{background:color-mix(in srgb,var(--amber) 10%,var(--panel2))}
 .mgrid .cell.n{background:var(--amber);border-color:var(--amber)}
 .mgrid .cell.nc{background:color-mix(in srgb,var(--amber) 55%,var(--panel2));border-color:var(--amber);border-left-color:transparent}
@@ -575,9 +582,10 @@ input[type=range]{width:100%;accent-color:var(--amber)}
         <label class="check" style="margin-top:0"><input type="checkbox" id="varSolo"> Tijdens het bewerken alleen deze variant herhalen</label>
         <p id="seqInfo" class="hint" style="margin:0"></p>
       </div>
+      <div id="melPager" class="row" style="margin-bottom:6px" hidden><button id="melPrev" class="btn sm" type="button" aria-label="Vorige maat">◀</button><b id="melPageLab" class="mono" style="font-size:13px"></b><button id="melNext" class="btn sm" type="button" aria-label="Volgende maat">▶</button></div>
       <div class="gridwrap"><div id="melGrid" class="sgrid mgrid"></div></div>
-      <div class="legend"><span><i style="background:var(--amber)"></i>begin van een noot</span><span><i style="background:var(--amber-soft)"></i>noot klinkt door</span><span style="color:var(--good)">groene naam: akkoordtoon</span></div>
-      <p class="hint">Tik in een leeg vakje voor een noot, tik op een noot om hem weg te halen. De lengte kies je hierboven.</p>
+      <div class="legend"><span><i style="background:var(--amber)"></i>begin van een noot</span><span><i style="background:var(--amber-soft)"></i>noot klinkt door</span><span><i style="background:color-mix(in srgb,var(--good) 30%,var(--panel2))"></i>past bij het akkoord dat dan klinkt</span></div>
+      <p class="hint"><b>Tekenen:</b> tik in een leeg vakje voor een noot, of tik en schuif naar rechts om hem zo lang te trekken als je wil. <b>Verplaatsen:</b> sleep een noot vanaf haar begin naar een andere toon of tel. <b>Langer of korter:</b> sleep aan het einde van een noot. <b>Weghalen:</b> hou een noot even ingedrukt. Groene vakjes passen bij het akkoord dat op dat moment klinkt (de naam staat bovenaan): daar klinkt een noot altijd mooi.</p>
     </section>
   </div>
 
@@ -2849,27 +2857,124 @@ function renderDrumGrid(){
     }
   });
 }
+// Welke stappen staan in beeld: op een smal scherm één maat tegelijk (grotere vakjes), anders alles.
+function melView(){
+  const N=patLen(),bs=barSteps(),narrow=(window.innerWidth||800)<700&&N>bs;
+  const pages=narrow?Math.ceil(N/bs):1;S.melPage=Math.max(0,Math.min(pages-1,S.melPage||0));
+  return {N,a:narrow?S.melPage*bs:0,b:narrow?Math.min(N,(S.melPage+1)*bs):N,pages};
+}
 function renderMelGrid(){
-  const tr=S.track,T=P.mel[tr],N=patLen(),rows=rowsOf(tr),box=$('melGrid');
-  box.innerHTML='';melCells=[];
-  box.style.gridTemplateColumns='44px repeat('+N+',minmax(15px,1fr))';
+  const tr=S.track,T=P.mel[tr],rows=rowsOf(tr),box=$('melGrid'),V=melView();
+  box.innerHTML='';melCells=[];S.melAt={};
+  const cols=V.b-V.a;
+  box.style.gridTemplateColumns='40px repeat('+cols+',minmax('+(cols<=16?12:15)+'px,1fr))';
   const key=musicKey();
-  const map={};
-  T.notes.forEach(n=>{for(let i=0;i<n.l&&n.s+i<N;i++)map[n.r+':'+(n.s+i)]=i===0?'n':'nc';});
+  // bovenaan: welk akkoord klinkt waar
+  const head=document.createElement('span');head.className='mhead lab';box.appendChild(head);
+  let prevIdx=-1;
+  for(let s=V.a;s<V.b;s++){
+    const h=document.createElement('span');h.className='mhead';const n=S.chords.length;
+    if(n){const idx=Math.floor(s/chordLen())%n;if(idx!==prevIdx){h.textContent=S.chords[idx].name;h.classList.add('chg');prevIdx=idx;}}
+    box.appendChild(h);
+  }
   for(let r=rows-1;r>=0;r--){
     const lab=document.createElement('button');lab.type='button';lab.className='lab mlab';lab.dataset.r=r;
     lab.textContent=rowLabel(tr,r,key);
     lab.onclick=()=>hitKey(r);
     box.appendChild(lab);
-    for(let s=0;s<N;s++){
-      const c=document.createElement('button');c.type='button';
-      c.className='cell'+colClass(s)+(r%7===0?' rowroot':'')+(map[r+':'+s]?' '+map[r+':'+s]:'');
-      c.onclick=()=>melTap(s,r);
-      (melCells[s]=melCells[s]||[]).push(c);
+    for(let s=V.a;s<V.b;s++){
+      const c=document.createElement('button');c.type='button';c.dataset.s=s;c.dataset.r=r;
+      c.setAttribute('aria-label',rowLabel(tr,r,key)+', stap '+(s+1));
+      // alleen met het toetsenbord (Enter/spatie): zoals vroeger noot zetten of weghalen
+      c.onclick=()=>{if(performance.now()-(S.mPtrT||0)<900)return;melTap(s,r);}; // klik na een aanraking negeren
+      (melCells[s]=melCells[s]||[]).push(c);S.melAt[r+':'+s]=c;
       box.appendChild(c);
     }
   }
-  renderMelLabels();
+  paintMel();renderMelLabels();renderMelPager(V);
+}
+// Kleuren zonder alles opnieuw te bouwen (snel genoeg om tijdens het slepen te doen).
+function paintMel(){
+  const tr=S.track,T=P.mel[tr];if(!T||!S.melAt)return;
+  const key=musicKey(),map={},sel=S.mdrag&&S.mdrag.note;
+  T.notes.forEach(n=>{for(let i=0;i<n.l;i++)map[n.r+':'+(n.s+i)]=(i===0?'n':'nc')+(n===sel?' msel':'')+(i===n.l-1&&n.l>1?' nend':'');});
+  const ctCache={};
+  for(const k in S.melAt){
+    const c=S.melAt[k],s=+c.dataset.s,r=+c.dataset.r;
+    let ct=ctCache[s];
+    if(ct===undefined){const ch=chordAtStep(s);ct=ctCache[s]=ch?ch.pcs:null;}
+    const pc=((rowMidi(tr,r,key,chordAtStep(s))%12)+12)%12;
+    c.className='cell'+colClass(s)+(r%7===0?' rowroot':'')+(ct&&ct.includes(pc)?' ct':'')+(map[k]?' '+map[k]:'');
+  }
+}
+function renderMelPager(V){
+  const pg=$('melPager');if(!pg)return;
+  pg.hidden=V.pages<2;if(V.pages<2)return;
+  $('melPageLab').textContent='Maat '+(S.melPage+1)+' van '+V.pages;
+  $('melPrev').disabled=S.melPage===0;$('melNext').disabled=S.melPage>=V.pages-1;
+}
+/* ---------- tekenen met je vinger ---------- */
+// Leeg vakje: tik = noot (lengte uit "Lengte nieuwe noot"), tik en schuif naar rechts = zelf de lengte trekken.
+// Noot: slepen vanaf het begin = verplaatsen (toon en tijd), slepen vanaf een ander stuk = langer/korter maken,
+// lang drukken = weghalen. Elke toon die je raakt, hoor je meteen.
+function melCellAt(x,y){const el=document.elementFromPoint(x,y);return el&&el.closest&&el.closest('#melGrid .cell');}
+function melPreview(tr,r,s,l){
+  ensureCtx();S.ctx.resume();if(S.playing)return;
+  const T=P.mel[tr];synth(T.inst,rowMidi(tr,r,musicKey(),chordAtStep(s)),S.ctx.currentTime+0.005,Math.min(0.6,Math.max(0.15,(l||1)*0.15)),isBass(tr)?0.16:0.12,dest(tr));
+}
+function melFree(T,n,s,r,l,N){
+  if(s<0||s+l>N||r<0||r>=rowsOf(S.track))return false;
+  return !T.notes.some(o=>o!==n&&o.r===r&&o.s<s+l&&s<o.s+o.l);
+}
+function melMaxLen(T,n,s,r,N){let L=N-s;T.notes.forEach(o=>{if(o!==n&&o.r===r&&o.s>s)L=Math.min(L,o.s-s);});return Math.max(1,L);}
+function setupMelDraw(){
+  const box=$('melGrid');
+  box.addEventListener('pointerdown',e=>{
+    const c=e.target.closest&&e.target.closest('.cell');if(!c||e.button>0)return;
+    e.preventDefault();S.mPtrT=performance.now();
+    const tr=S.track,T=P.mel[tr],N=patLen(),s=+c.dataset.s,r=+c.dataset.r,hit=noteAt(tr,s,r);
+    const D={tr,x:e.clientX,y:e.clientY,moved:false,changed:false,t0:performance.now(),lastR:r,lastS:s};
+    if(hit){
+      D.note=hit;D.mode=s===hit.s?'move':'size';D.off=s-hit.s;
+      D.lp=setTimeout(()=>{if(D.moved||S.mdrag!==D)return;pushUndo();T.notes=T.notes.filter(n=>n!==hit);D.done=true;
+        try{navigator.vibrate&&navigator.vibrate(25);}catch(_){}save();paintMel();msg('Noot weggehaald. ↶ zet hem terug.');},450);
+      melPreview(tr,hit.r,hit.s,hit.l);
+    }else{
+      pushUndo();
+      const l=Math.min(T.len,melMaxLen(T,null,s,r,N));
+      D.note={s,r,l};D.mode='draw';D.defL=l;D.changed=true;T.notes.push(D.note);
+      melPreview(tr,r,s,l);
+    }
+    S.mdrag=D;try{box.setPointerCapture(e.pointerId);}catch(_){}
+    paintMel();
+  });
+  box.addEventListener('pointermove',e=>{
+    const D=S.mdrag;if(!D||D.done)return;
+    if(!D.moved&&Math.hypot(e.clientX-D.x,e.clientY-D.y)>6){D.moved=true;clearTimeout(D.lp);}
+    if(!D.moved)return;
+    const c=melCellAt(e.clientX,e.clientY);if(!c)return;
+    const T=P.mel[D.tr],N=patLen(),s=+c.dataset.s,r=+c.dataset.r,n=D.note;
+    if(D.mode==='draw'||D.mode==='size'){
+      const L=Math.max(1,Math.min(s-n.s+1,melMaxLen(T,n,n.s,n.r,N)));
+      if(L!==n.l){if(!D.changed){pushUndo();D.changed=true;}n.l=L;paintMel();}
+    }else{
+      const ns=Math.max(0,Math.min(N-n.l,s-D.off));
+      if((ns!==n.s||r!==n.r)&&melFree(T,n,ns,r,n.l,N)){
+        if(!D.changed){pushUndo();D.changed=true;}
+        const newRow=r!==n.r;n.s=ns;n.r=r;paintMel();if(newRow)melPreview(D.tr,r,ns,n.l);
+      }
+    }
+  });
+  const end=e=>{
+    const D=S.mdrag;if(!D)return;S.mdrag=null;clearTimeout(D.lp);S.mPtrT=performance.now();
+    try{box.releasePointerCapture(e.pointerId);}catch(_){}
+    if(D.changed&&!D.done)save();
+    paintMel();
+  };
+  box.addEventListener('pointerup',end);box.addEventListener('pointercancel',end);
+  $('melPrev').onclick=()=>{S.melPage--;S.melPageT=performance.now();renderMelGrid();};
+  $('melNext').onclick=()=>{S.melPage++;S.melPageT=performance.now();renderMelGrid();};
+  window.addEventListener('resize',()=>{if(S.tab==='mel')renderMelGrid();});
 }
 function melTap(s,r){
   const tr=S.track,T=P.mel[tr],N=patLen();
@@ -2933,6 +3038,7 @@ function markPos(pos,cpos){
     (melCells[S.lastMark]||[]).forEach(c=>c.classList.remove('now'));
   }
   S.lastMark=pos;
+  if(pos>=0&&S.tab==='mel'&&!S.mdrag&&performance.now()-(S.melPageT||0)>4000){const V=melView();if(V.pages>1&&(pos<V.a||pos>=V.b)){S.melPage=Math.floor(pos/barSteps());renderMelGrid();}}
   if(pos>=0){
     (drumCells[pos]||[]).forEach(c=>c.classList.add('now'));
     (melCells[pos]||[]).forEach(c=>c.classList.add('now'));
@@ -5922,7 +6028,7 @@ function init(){
   $('feel').oninput=e=>{P.mel[S.track].feel=+e.target.value;$('feelVal').textContent=e.target.value;save();};
   $('glideCb').onchange=e=>{P.mel[S.track].glide=e.target.checked;save();};
   $('humBtn').onclick=toggleHum;
-  setupVoc();setupVars();setupBackup();setupSampler();setupIdle();setupCells();setupText();setupSong();setupSeq();setupLayers();
+  setupVoc();setupVars();setupBackup();setupSampler();setupIdle();setupCells();setupText();setupSong();setupSeq();setupLayers();setupMelDraw();
   $('humNudge').oninput=e=>nudgeHum(+e.target.value);
   $('melRand').onclick=randomMel;
   $('melClear').onclick=()=>{pushUndo();P.mel[S.track].notes=[];save();renderMelGrid();msg((S.track==='A'?'Melodie':'Bas')+' gewist. ↶ zet hem terug.');};

@@ -29,6 +29,10 @@ eindpoort dicht, worden galm/echo vervangen door verse (`flushTails`) en wordt d
 (`startTimer`) en plant met het scherm uit 1,5 s vooruit; na een hapering slaat hij gemiste stappen over.
 
 ## Versies
+- **3.8** – Melodieraster om te tekenen (`setupMelDraw`, pointer events): tik = noot, tik+schuif = lengte trekken,
+  slepen vanaf het begin = verplaatsen, slepen aan het einde = lengte, lang drukken = weg. Vakjes die bij het
+  akkoord van dat moment passen, kleuren groen (`paintMel`), akkoordnamen bovenaan. Op een smal scherm één maat
+  tegelijk (`melView`, volgt de maat die speelt). Klik na een aanraking wordt genegeerd (`S.mPtrT`).
 - **3.7** – Fades per spoor (mixer → ▾ Fade): fade-tijd in tellen/maten (`P.mix[b].fd`, `fadeSecs`), Dempen fadet
   mee, knoppen Fade uit/in; curve met gelijk vermogen (`fadeBus`, setValueCurveAtTime). applyMix laat een lopende
   fade met rust (`S.fadeUntil`).
