@@ -4,8 +4,14 @@ De app zelf staat in `app/src/main/assets/index.html` (dezelfde code als in de b
 De Kotlin-code in `app/src/main/java/nl/zangcoach/studio/` is de schil eromheen:
 
 - `MainActivity.kt` – laadt de pagina (met het vaste adres `https://zangcoach.app/`, zodat bewaarde nummers blijven),
-  microfoon, bestanden kiezen, terug-knop stuurt naar de achtergrond.
-- `Bridge.kt` – `window.ZangcoachApp`: `saveAudio` (naar Download/Zangcoach), `share`, `playing`, `features`.
+  microfoon, bestanden kiezen, terug-knop stuurt naar de achtergrond. Crasht de pagina of sluit Android ze af
+  (`onRenderProcessGone`), dan wordt ze opnieuw opgebouwd i.p.v. dat de app crasht. `onPause` laat de pagina
+  alles wegschrijven (`zcFlush`).
+- `Bridge.kt` – `window.ZangcoachApp`: `saveAudio` en `share` (in één keer, oud), `fileOpen`/`fileWrite`/`fileClose`
+  (in stukjes van 768 kB, voor grote back-ups), `playing`, `features`.
+- `FileSink.kt` – schrijft die stukjes naar Download/Zangcoach of naar een tijdelijk bestand om te delen.
+- `AudioGuard.kt` – audiofocus zolang er muziek speelt: bij een oproep/andere muziek of als de koptelefoon
+  losgaat, roept hij `zcAudioInterrupt('focus'|'noisy')` in de pagina aan (die stopt de muziek).
 - `PlaybackService.kt` – houdt de app wakker zolang er muziek speelt.
 - `NativeMic.kt` – eigen microfoon (AudioRecord, ingebouwde mic, gewone modus): `micStart`, `micRead`, `micStop`.
   Zo zet Chromium een Bluetooth-koptelefoon niet in bellen-modus (SCO) tijdens het opnemen.
@@ -21,6 +27,15 @@ anders kan de APK niet over de oude app geïnstalleerd worden.
 
 versionCode moet altijd hoger zijn dan de vorige (oude app eindigde op 17).
 
+## Opslag (in de pagina)
+- Het nummer: `localStorage` (`zangcoach-studio`, + `-at` = tijd van de laatste wijziging) én een reservekopie in
+  IndexedDB `zangcoach-veilig` (`cur`, 2 s na een wijziging en meteen bij naar de achtergrond gaan). Bij het opstarten
+  wint de nieuwste (`restoreCheck`). Onleesbaar nummer: de ruwe tekst gaat naar `zangcoach-studio-redding`.
+  Laat een nummer de app niet opstarten, dan begint ze leeg en staat het nummer in de redding.
+- Zangopnames: IndexedDB `zangcoach-zang`. Samples: `zangcoach-samples`. Mix-opnames: `zangcoach-opnames` (hoogstens 20).
+- Fouten: de laatste 30 in `localStorage` `zangcoach-fouten` (`zcErr`); ze gaan mee in de back-up.
+  De planner beveiligt elk onderdeel apart (`guard`): een fout in één spoor legt de rest niet stil.
+
 ## Geluidsmotor (kort)
 Bronnen → per spoor: poort (alleen tijdens afspelen) → klankkleur → rack (vervorming, bitcrush, tape-wobble,
 helderheid, EQ, compressie) → effect → links/rechts → spoorvolume → master (+ galm en echo als send) →
@@ -29,8 +44,16 @@ Na stoppen of een losse klank: galm en echo klinken uit (`tailMs`, hangt af van 
 eindpoort dicht, worden galm/echo vervangen door verse (`flushTails`) en wordt de AudioContext geschorst
 (`ctxSleep`). Elke klank of tik maakt hem wakker (`ctxWake`). De planner (`sched`) tikt via een Worker
 (`startTimer`) en plant met het scherm uit 1,5 s vooruit; na een hapering slaat hij gemiste stappen over.
+Zuinig: een bewerking op 0 zit niet in de keten (rack: `wire`, master-EQ: `eqWire`, lo-fi: `lofiPath`, verzadiging
+van de klankkleur alleen bij Stoffig/Telefoon). De compressor per spoor blijft altijd in de keten (ook neutraal
+bepaalt hij mee het vertrouwde volume en de timing). Gemeten: ~35% minder rekenwerk tijdens het spelen, zelfde klank.
+Wisselt een deel tijdens het spelen, dan wordt eerst het geluid gepland en pas daarna het scherm bijgewerkt.
 
 ## Versies
+- **3.11** – Stabieler en zuiniger: geluidsmotor ~35% minder rekenwerk (zelfde klank), reservekopie van je nummer in
+  IndexedDB + redding bij een kapot nummer + veilig opstarten, foutenlog, planner per onderdeel beveiligd, mix-opnames
+  blijven bewaard (met Verwijder), grote back-ups in stukjes naar Android, de app herstelt zich als de pagina crasht,
+  muziek stopt bij een oproep of als de koptelefoon losgaat.
 - **3.10** – Eigen akkoordprogressie: tegel ✎ Eigen akkoorden (`P.cprog`, tot 16 akkoorden relatief t.o.v. de grondtoon,
   schuift mee met de toonsoort), kiezen uit toonsoort- en geleende akkoorden, sus/verminderd/overmatig, extra kleur per akkoord,
   intypen als namen (Am F C G7, F#m7b5, Bdim7) of trappen (vi IV I V, bVII, iiø7).

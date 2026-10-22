@@ -795,7 +795,7 @@ input[type=range]{width:100%;accent-color:var(--amber)}
         <button id="bkImport" class="btn" type="button">⬆ Back-up terugzetten</button>
         <input type="file" id="bkFile" accept=".zcb,application/octet-stream,application/json" hidden>
       </div>
-      <p class="hint">De back-up is één bestand met je huidige nummer, de 4 plekken, al je zangopnames, je samples en je timing-instelling. Bewaar hem ergens veilig, bijvoorbeeld op Drive. Terugzetten werkt in de browser en in de volgende versie van de app.</p>
+      <p class="hint">De back-up is één bestand met je huidige nummer, de 4 plekken, al je zangopnames, je samples, je mix-opnames en je timing-instelling. Bewaar hem ergens veilig, bijvoorbeeld op Drive. Terugzetten werkt in de browser en in de volgende versie van de app.</p>
     </section>
     <section class="card">
       <h2 class="label">Over de klanken</h2>
@@ -1561,9 +1561,66 @@ Object.defineProperty(S,'keyMode',{get:()=>P.key.mode,set:v=>{P.key.mode=v;}});
 Object.defineProperty(S,'manual',{get:()=>({tonic:P.key.tonic,mode:P.key.m}),set:v=>{P.key.tonic=v.tonic;P.key.m=v.mode;}});
 
 /* ---------- bewaren ---------- */
+const APPV='3.11';
 const STORE='zangcoach-studio';
-let saveT=null;
-function save(){syncMel(P.mel);clearTimeout(saveT);saveT=setTimeout(()=>{try{localStorage.setItem(STORE,JSON.stringify(P));}catch(e){}},300);if(typeof refreshVoc==='function')refreshVoc();}
+let saveT=null,safeT=null;
+// Bewaren gebeurt in twee lagen: localStorage (snel, zoals altijd) en een reservekopie in IndexedDB
+// (die schrijft betrouwbaar naar schijf, ook als Android de app plots afsluit). Bij het opstarten wint
+// de nieuwste van de twee (zie restoreCheck).
+function save(){
+  syncMel(P.mel);S.editAt=Date.now();S.dirty=true;
+  clearTimeout(saveT);saveT=setTimeout(persist,300);
+  clearTimeout(safeT);safeT=setTimeout(persistSafe,2000);
+  if(typeof refreshVoc==='function')refreshVoc();
+}
+function persist(){
+  clearTimeout(saveT);saveT=null;if(!S.dirty)return;
+  try{syncMel(P.mel);localStorage.setItem(STORE,JSON.stringify(P));localStorage.setItem(STORE+'-at',String(S.editAt||Date.now()));S.dirty=false;S.saveWarned=false;}
+  catch(e){
+    if(!S.saveWarned){S.saveWarned=true;msg('Je nummer kon niet bewaard worden ('+(e&&e.name==='QuotaExceededError'?'opslag vol':'opslagfout')+'). Er staat wel een reservekopie. Maak voor de zekerheid een back-up bij Mix.',true);}
+    zcErr(e,'bewaren');
+  }
+}
+function persistSafe(){
+  clearTimeout(safeT);safeT=null;
+  try{syncMel(P.mel);SAFE.put('cur',{at:S.editAt||Date.now(),json:JSON.stringify(P)}).catch(e=>zcErr(e,'reservekopie'));}catch(e){zcErr(e,'reservekopie');}
+}
+// meteen alles wegschrijven (als de app naar de achtergrond gaat)
+function flushSave(){if(saveT)persist();if(safeT)persistSafe();}
+window.zcFlush=flushSave;
+const SAFE={
+  p:null,
+  open(){
+    if(this.p)return this.p;
+    this.p=new Promise((res,rej)=>{
+      if(!window.indexedDB){rej(new Error('geen opslag'));return;}
+      const r=indexedDB.open('zangcoach-veilig',1);
+      r.onupgradeneeded=()=>{r.result.createObjectStore('kv');};
+      r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);
+    });
+    this.p.catch(()=>{this.p=null;});
+    return this.p;
+  },
+  async tx(mode,fn){const db=await this.open();return new Promise((res,rej)=>{const t=db.transaction('kv',mode),r=fn(t.objectStore('kv'));t.oncomplete=()=>res(r?r.result:undefined);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error);});},
+  put(k,v){return this.tx('readwrite',st=>st.put(v,k));},
+  get(k){return this.tx('readonly',st=>st.get(k));},
+  del(k){return this.tx('readwrite',st=>st.delete(k));},
+  all(){return this.tx('readonly',st=>st.getAll());},
+  keys(){return this.tx('readonly',st=>st.getAllKeys());}
+};
+// Fouten onthouden (de laatste 30), zodat we later kunnen zien wat er misliep. Ze gaan mee in de back-up.
+function zcErr(e,where){
+  try{
+    const m=String(e&&(e.message||e.reason&&e.reason.message)||e||'?').slice(0,200),st=String(e&&e.stack||'').split('\n').slice(1,3).join(' | ').slice(0,240);
+    const L=JSON.parse(localStorage.getItem('zangcoach-fouten')||'[]');
+    L.push({t:new Date().toISOString(),w:where||'',m,st,v:typeof APPV!=='undefined'?APPV:''});
+    localStorage.setItem('zangcoach-fouten',JSON.stringify(L.slice(-30)));
+    console.warn('[zangcoach]',where,e);
+    if(!S.errShown&&where!=='bewaren'&&where!=='reservekopie'){S.errShown=true;setTimeout(()=>msg('Er liep iets mis ('+m.slice(0,80)+'). De app werkt verder; de fout is genoteerd.'),0);}
+  }catch(_){}
+}
+window.addEventListener('error',e=>{if(e&&e.error)zcErr(e.error,'pagina');});
+window.addEventListener('unhandledrejection',e=>{const r=e&&e.reason;if(r&&r.name==='AbortError')return;zcErr(r||e,'belofte');});
 function fixProject(p){
   const d=defaultProject();
   const o=Object.assign(d,p||{});
@@ -1571,8 +1628,8 @@ function fixProject(p){
   DRUMS.forEach(x=>{const a=o.drums[x.id];if(!Array.isArray(a)||a.length<MAXS)o.drums[x.id]=(a||[]).concat(new Array(MAXS).fill(0)).slice(0,MAXS);});
   o.mel=Object.assign(defaultProject().mel,o.mel||{});
   fixMel(o.mel);
-  o.mix=Object.assign(defaultProject().mix,o.mix||{});
-  o.master=Object.assign(defaultProject().master,o.master||{});
+  o.mix=Object.assign(defaultProject().mix,cleanMix(o.mix));
+  o.master=Object.assign(defaultProject().master,o.master&&typeof o.master==='object'?o.master:{});
   o.key=Object.assign(defaultProject().key,o.key||{});
   if(!TS[o.ts])o.ts='4/4';
   if(!RHYTHMS.some(r=>r.id===o.rhythm))o.rhythm='pad';
@@ -1592,9 +1649,31 @@ function fixProject(p){
   o.parts.forEach((pt,i)=>{if(i!==o.cur&&pt.data){const f=fixProject.partFix;if(f)f(pt.data,o);}});
   return o;
 }
+// alleen echte instellingen per spoor overhouden (een kapotte waarde mag het scherm niet laten crashen)
+function cleanMix(m){const o={};if(m&&typeof m==='object')for(const k in m)if(m[k]&&typeof m[k]==='object'&&!Array.isArray(m[k]))o[k]=m[k];return o;}
 function load(){
-  S.loadOk=false;
-  try{const j=localStorage.getItem(STORE);if(j)P=fixProject(JSON.parse(j));S.loadOk=true;}catch(e){}
+  S.loadOk=false;let j=null;
+  try{j=localStorage.getItem(STORE);S.localAt=+localStorage.getItem(STORE+'-at')||0;if(j)P=fixProject(JSON.parse(j));S.loadOk=true;}
+  catch(e){
+    // kapot of onleesbaar: de ruwe tekst apart zetten vóór er iets overschreven wordt
+    try{if(j)localStorage.setItem(STORE+'-redding',j);}catch(_){}
+    S.loadBroken=true;P=defaultProject();zcErr(e,'laden');
+  }
+}
+// Na het opstarten: is de reservekopie nieuwer (of was localStorage leeg of kapot)? Dan die terugzetten.
+async function restoreCheck(){
+  let o=null;try{o=await SAFE.get('cur');}catch(e){}
+  if(!o||!o.json)return;
+  const hasLocal=!!localStorage.getItem(STORE),wasBroken=!!S.loadBroken;
+  if(S.loadOk&&hasLocal&&!(o.at>(S.localAt||0)+500))return;
+  if(S.editAt&&S.editAt>o.at)return; // intussen al verder gewerkt
+  try{
+    const np=fixProject(JSON.parse(o.json));
+    if(S.playing)stop();
+    P=np;S.loadOk=true;S.loadBroken=false;S.editAt=o.at;S.dirty=true;persist();
+    syncControls();$('tonicSel').value=String(P.key.tonic);$('modeSel').value=P.key.m;renderAll();applyMix();
+    msg('Je nummer is teruggezet uit de reservekopie'+(hasLocal&&!wasBroken?' (die was nieuwer).':'.'));
+  }catch(e){zcErr(e,'reservekopie terugzetten');}
 }
 function pushUndo(){syncMel(P.mel);S.undo.push(JSON.stringify({drums:P.drums,mel:P.mel,dprob:P.dprob,drat:P.drat,dslc:P.dslc,dstn:P.dstn,dsln:P.dsln,drgl:P.drgl}));if(S.undo.length>60)S.undo.shift();}
 function undo(){
@@ -1679,7 +1758,7 @@ function ensureCtx(){
   S.out=c.createGain();S.out.gain.value=0.55*Math.pow(10,((P.master.loud==null?40:P.master.loud)*0.15)/20);
   S.hp=c.createBiquadFilter();S.hp.type='highpass';S.hp.frequency.value=32;S.hp.Q.value=0.7;
   S.lofiLP=c.createBiquadFilter();S.lofiLP.type='lowpass';S.lofiLP.frequency.value=12000;
-  const meq=buildMasterEQ(c);S.master.connect(meq.inp);meq.out.connect(S.hp);S.hp.connect(S.filter);S.filter.connect(S.dry);S.filter.connect(S.lofiLP);S.lofiLP.connect(S.shaper);S.shaper.connect(S.wet);
+  const meq=buildMasterEQ(c);S.master.connect(meq.inp);meq.out.connect(S.hp);S.hp.connect(S.filter);S.filter.connect(S.dry);S.lofiOn=false;S.lofiLP.connect(S.shaper);S.shaper.connect(S.wet);
   // tape-stop: een vertraging die steeds langer wordt laat alles trager en lager klinken
   S.tape=c.createDelay(2);S.tape.delayTime.value=0;S.tapeG=c.createGain();
   S.dry.connect(comp);S.wet.connect(comp);S.chop=c.createGain();comp.connect(S.chop);S.chop.connect(S.tape);S.tape.connect(S.tapeG);S.tapeG.connect(S.out);
@@ -1726,8 +1805,9 @@ function makeBus(c,b){
     // klankkleur: hoog- en laagdoorlaat + zachte verzadiging, ingevoegd vóór het spoorvolume
     const inn=c.createGain(),hp=c.createBiquadFilter(),lp=c.createBiquadFilter(),sh=c.createWaveShaper(),dry=c.createGain(),wet=c.createGain();
     hp.type='highpass';lp.type='lowpass';hp.frequency.value=20;lp.frequency.value=20000;sh.oversample='2x';
-    inn.connect(hp);hp.connect(lp);lp.connect(dry);lp.connect(sh);sh.connect(wet);dry.connect(pre);wet.connect(pre);wet.gain.value=0;
-    Object.assign(S.bus[b],{in:inn,hp,lp,sh,dry,wet,col:''});
+    inn.connect(hp);hp.connect(lp);lp.connect(dry);sh.connect(wet);dry.connect(pre);wet.connect(pre);wet.gain.value=0;
+    // de verzadiging (zwaar om te berekenen) hangt er alleen aan bij een kleur die ze gebruikt (zie setColor)
+    Object.assign(S.bus[b],{in:inn,hp,lp,sh,dry,wet,col:'',shOn:false});
   }
   if(S.throwIn)g.connect(S.throwIn);
 }
@@ -1753,12 +1833,16 @@ function applyMix(){
   S.lofiLP.frequency.setTargetAtTime(12000*Math.pow(2200/12000,lf),t,0.03);
   S.wet.gain.setTargetAtTime(lf>0?Math.min(1,lf*2):0,t,0.02);
   S.dry.gain.setTargetAtTime(1-Math.min(1,lf*2),t,0.02);
+  lofiPath(lf>0);
   S.vinylG.gain.setTargetAtTime(S.playing?(M.vinyl||0)/100*0.06:0,t,0.05); // alleen tijdens het afspelen
   for(const b in S.bus)if(S.bus[b].hp)setColor(b,(P.color&&P.color[b])||'normaal');
   S.fb.gain.setTargetAtTime(M.fb/100,t,0.02);
   S.delay.delayTime.setTargetAtTime(Math.min(2.9,M.dly*60/P.bpm/4),t,0.05);
-  if(S.meq){const e=meqVals();S.meq.forEach((b,i)=>b.gain.setTargetAtTime(e[i],t,0.03));}
-  if(S.aeq){const A=P.master.aeq,on=A&&Array.isArray(A.g)&&A.g.length===S.aeq.length,k=on?(A.amt==null?0.8:A.amt):0;S.aeq.forEach((b,i)=>b.gain.setTargetAtTime(on?A.g[i]*k:0,t,0.05));}
+  if(S.meq){
+    const e=meqVals(),A=P.master.aeq,on=A&&Array.isArray(A.g)&&A.g.length===S.aeq.length,k=on?(A.amt==null?0.8:A.amt):0,ag=S.aeq.map((b,i)=>on?A.g[i]*k:0);
+    S.meq.forEach((b,i)=>b.gain.setTargetAtTime(e[i],t,0.03));S.aeq.forEach((b,i)=>b.gain.setTargetAtTime(ag[i],t,0.05));
+    eqWire(S.meq.filter((b,i)=>Math.abs(e[i])>0.01).concat(S.aeq.filter((b,i)=>Math.abs(ag[i])>0.01)));
+  }
   const room=M.room||'zaal';if(S.conv&&S.lastRoom!==room){S.conv.buffer=makeImpulse(S.ctx,room);S.lastRoom=room;}
   for(const b in S.bus){const m=mixOf(b);S.bus[b].rack.set(m,t);applyBusFx(b,m.fx||'geen',m.fa==null?0.5:m.fa);if(S.bus[b].pan)S.bus[b].pan.pan.setTargetAtTime(m.p||0,t,0.03);}
 }
@@ -1779,6 +1863,10 @@ function setColor(b,col){
   else if(col==='telefoon')set(500,2600,0.6,3);
   else if(col==='onderwater')set(20,600,0,0);
   else set(20,20000,0,0);
+  const on=col==='stoffig'||col==='telefoon';
+  clearTimeout(B.shT);
+  if(on&&!B.shOn){B.shOn=true;B.lp.connect(B.sh);}
+  else if(!on&&B.shOn)B.shT=setTimeout(()=>{if(B.shOn&&B.col!=='stoffig'&&B.col!=='telefoon'){B.shOn=false;try{B.lp.disconnect(B.sh);}catch(e){}}},300);
 }
 function makeGates(){
   const g={};
@@ -2142,16 +2230,16 @@ function playStep(abs,t0,sd,spb){
   const N=patLen(),pos=step%N,bpos=step%barSteps();
   const sw=P.swing/100;
   const t=t0+(bpos%4===2?sw*spb/6:(bpos%2===1?sw*spb/12:0));
-  // akkoorden
+  // akkoorden (elke laag en elk spoor apart beveiligd: een fout in één ervan legt de rest niet stil)
   const n=S.chords.length,cl=chordLen();
   if(n){
     const idx=Math.floor(step/cl)%n,cpos=step%cl,ch=S.chords[idx];
     if(cpos===0){S.vq.push({t:t0,idx});S.arpN=0;S.arpNs={};}
-    for(let li=0;li<nChord();li++)withChord(li,()=>{const b=chordBus(li);if(!(P.mix[b]&&P.mix[b].m))playChordStep(curRhythm(),ch,step,cpos,cl,t,sd,bpos,dest(b));});
+    for(let li=0;li<nChord();li++)guard('akkoorden',()=>withChord(li,()=>{const b=chordBus(li);if(!(P.mix[b]&&P.mix[b].m))playChordStep(curRhythm(),ch,step,cpos,cl,t,sd,bpos,dest(b));}));
   }
   S.sq.push({t,pos,cpos:n?step%cl:0,step});
   // drums
-  for(let li=0;li<nBeat();li++)withBeat(li,()=>{
+  for(let li=0;li<nBeat();li++)guard('drums',()=>withBeat(li,()=>{
     const bus=beatBus(li);if(P.mix[bus]&&P.mix[bus].m)return;
     const out=dest(bus),gl=P.glitch/100;
     const fk=li===0?fillAt(pos,step):-1;
@@ -2179,16 +2267,16 @@ function playStep(abs,t0,sd,spb){
         for(let i=0;i<k;i++)drum(d.id,t+i*sd/k,vel*(1-i*0.15),out,sl,hm);
       }else drum(d.id,t,vel,out,sl,hm);
     }
-  });
+  }));
   // melodie en bas
   const key=musicKey(),ch=chordAtStep(step);
   for(const tr of melTracks()){
     if((P.mix[tr]&&P.mix[tr].m)||(S.hum&&S.hum.tr===tr))continue;
-    const T=P.mel[tr],out=dest(tr),nts=melVar(T,playVar(tr,step));
-    for(const nt of nts) if(nt.s===pos)playNote(tr,T,nt,nts,step,pos,bpos,t,sd,key,ch,out);
+    guard('melodie',()=>{const T=P.mel[tr],out=dest(tr),nts=melVar(T,playVar(tr,step));
+    for(const nt of nts) if(nt.s===pos)playNote(tr,T,nt,nts,step,pos,bpos,t,sd,key,ch,out);});
   }
   // zang
-  vocStep(step,t0);
+  guard('zang',()=>vocStep(step,t0));
   if(TS[P.ts].g.includes(bpos))pumpAt(t0);
   if(P.metro){
     const g=TS[P.ts].g;
@@ -2197,6 +2285,8 @@ function playStep(abs,t0,sd,spb){
   if(S.hum&&S.hum.armed&&pos===0&&t0>S.ctx.currentTime+0.02){S.hum.startStep=step;S.hum.t0=t0;S.hum.sd=sd;S.hum.armed=false;}
   if(S.vrec&&S.vrec.armed&&pos===0&&t0>S.ctx.currentTime+0.02){S.vrec.startStep=step;S.vrec.t0=t0;S.vrec.sd=sd;S.vrec.armed=false;}
 }
+// een fout in één onderdeel noteren (één keer per soort) en verder spelen
+function guard(where,fn){try{return fn();}catch(e){S.guardSeen=S.guardSeen||{};if(!S.guardSeen[where]){S.guardSeen[where]=1;zcErr(e,'spelen: '+where);}}}
 function sched(){
   if(!S.playing)return;
   const spb=60/P.bpm,sd=spb/4,now=S.ctx.currentTime;S.sd=sd;
@@ -2205,7 +2295,7 @@ function sched(){
   // na een hapering: gemiste stappen overslaan in plaats van ze allemaal tegelijk af te vuren
   if(S.nextT<now-0.25){const k=Math.ceil((now-S.nextT)/sd);S.nextT+=k*sd;S.step+=k;}
   while(S.nextT<now+ahead){
-    playStep(S.step,S.nextT,sd,spb);
+    guard('planner',()=>playStep(S.step,S.nextT,sd,spb));
     S.nextT+=sd;S.step++;
   }
 }
@@ -2262,6 +2352,13 @@ function stop(){
   if(S.rec)stopRec();
   renderPlay();markChord(-1);markPos(-1,-1);markSeq(-1);flowMark(-1);renderKey();const pg=$('partProg');if(pg)pg.style.width='0';
 }
+// De Android-schil meldt: een ander geluid neemt het over (bv. telefoon) of de koptelefoon is los.
+// Dan stoppen we, zodat de muziek niet plots door de luidspreker blaast.
+window.zcAudioInterrupt=function(why){
+  if(!S.playing)return;
+  stop();
+  msg(why==='noisy'?'Gestopt: je koptelefoon is losgekoppeld.':'Gestopt: een ander geluid (bv. een oproep) nam het over.');
+};
 function renderPlay(){
   const b=$('playBtn');
   b.innerHTML=S.playing
@@ -2474,9 +2571,9 @@ function startRec(){
   mr.onstop=()=>{
     const blob=new Blob(chunks,{type:mr.mimeType||type||'audio/webm'});
     const ext=(blob.type.includes('mp4')?'m4a':blob.type.includes('ogg')?'ogg':'webm');
-    S.recs.unshift({url:URL.createObjectURL(blob),blob,ext,len:Math.round((performance.now()-S.recStart)/1000),n:S.recs.length+1});
-    renderRecs();
-    msg('Je opname staat bij Mix & opname.');
+    recAdd(blob,ext,Math.round((performance.now()-S.recStart)/1000)).then(ok=>{
+      msg(ok?'Je opname staat bij Mix & opname (ook na het sluiten van de app).':'Je opname staat bij Mix & opname. Bewaren lukte niet: sla ze op als MP3 voor je de app sluit.',!ok);
+    });
   };
   mr.start();S.rec=mr;S.recStart=performance.now();
   if(!S.playing)play();
@@ -2494,16 +2591,57 @@ function renderRecBtns(){
   $('recBtn2').classList.toggle('on',!!S.rec);
   $('recBtn2').textContent=S.rec?'■ Stop opname':'● Neem op';
 }
+// Mix-opnames staan in IndexedDB "zangcoach-opnames": ze blijven bewaard tot je ze verwijdert (hoogstens RMAX).
+const RMAX=20;
+const RDB={
+  p:null,
+  open(){
+    if(this.p)return this.p;
+    this.p=new Promise((res,rej)=>{
+      if(!window.indexedDB){rej(new Error('geen opslag'));return;}
+      const r=indexedDB.open('zangcoach-opnames',1);
+      r.onupgradeneeded=()=>{r.result.createObjectStore('recs',{keyPath:'id'});};
+      r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);
+    });
+    this.p.catch(()=>{this.p=null;});
+    return this.p;
+  },
+  async tx(mode,fn){const db=await this.open();return new Promise((res,rej)=>{const t=db.transaction('recs',mode),r=fn(t.objectStore('recs'));t.oncomplete=()=>res(r?r.result:undefined);t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error);});},
+  put(o){return this.tx('readwrite',st=>st.put(o));},
+  del(id){return this.tx('readwrite',st=>st.delete(id));},
+  all(){return this.tx('readonly',st=>st.getAll());}
+};
+async function recAdd(blob,ext,len,at){
+  const n=Math.max(0,...S.recs.map(r=>r.n))+1,id='r'+Date.now().toString(36)+'-'+rnd(1e9).toString(36);
+  const r={id,blob,ext,len,n,at:at||Date.now()};
+  S.recs.unshift(r);
+  let ok=true;try{await RDB.put({id,blob,ext,len,n,at:r.at});}catch(e){ok=false;zcErr(e,'opname bewaren');}
+  // te veel: de oudste gaan weg
+  while(S.recs.length>RMAX){const o=S.recs.pop();if(o.url)URL.revokeObjectURL(o.url);RDB.del(o.id).catch(()=>{});}
+  renderRecs();if(typeof fillSmpFrom==='function')fillSmpFrom();
+  return ok;
+}
+async function recInit(){
+  try{const all=await RDB.all();all.sort((a,b)=>b.at-a.at);for(const o of all)if(!S.recs.some(r=>r.id===o.id))S.recs.push(o);S.recs.sort((a,b)=>b.at-a.at);renderRecs();}catch(e){}
+}
 function renderRecs(){
   const box=$('recs');box.innerHTML='';
   if(!S.recs.length){box.innerHTML='<p class="hint" style="margin:0">Nog geen opnames.</p>';return;}
   S.recs.forEach(r=>{
+    if(!r.url)r.url=URL.createObjectURL(r.blob);
     const d=document.createElement('div');d.className='recitem';
-    d.innerHTML='<b>Opname '+r.n+' <span class="muted mono">('+r.len+' s)</span></b><audio controls src="'+r.url+'"></audio>'+
+    const when=r.at?new Date(r.at):null,ws=when?' · '+when.getDate()+'/'+(when.getMonth()+1)+' '+String(when.getHours()).padStart(2,'0')+':'+String(when.getMinutes()).padStart(2,'0'):'';
+    d.innerHTML='<b>Opname '+r.n+' <span class="muted mono">('+r.len+' s'+ws+')</span></b><audio controls preload="none" src="'+r.url+'"></audio>'+
       '<div class="row"><button type="button" class="btn sm primary">Opslaan als MP3</button>'+
-      (window.ZangcoachApp&&window.ZangcoachApp.share?'<button type="button" class="btn sm shr">Delen…</button>':'')+'</div>';
+      (window.ZangcoachApp&&window.ZangcoachApp.share?'<button type="button" class="btn sm shr">Delen…</button>':'')+
+      '<button type="button" class="btn sm rdel">Verwijder</button></div>';
     d.querySelector('button').onclick=e=>downloadRec(r,e.currentTarget);
     const sh=d.querySelector('.shr');if(sh)sh.onclick=e=>shareRec(r,e.currentTarget);
+    const del=d.querySelector('.rdel');
+    del.onclick=()=>{
+      if(del.dataset.sure!=='1'){del.dataset.sure='1';del.textContent='Zeker? Tik nog eens';setTimeout(()=>{del.dataset.sure='';del.textContent='Verwijder';},4000);return;}
+      S.recs=S.recs.filter(x=>x!==r);if(r.url)URL.revokeObjectURL(r.url);if(r.id)RDB.del(r.id).catch(()=>{});renderRecs();if(typeof fillSmpFrom==='function')fillSmpFrom();msg('Opname '+r.n+' verwijderd.');
+    };
     box.appendChild(d);
   });
 }
@@ -2546,12 +2684,29 @@ async function toWav(blob){
 async function shareRec(r,btn){
   btn.disabled=true;const old=btn.textContent;btn.textContent='MP3 maken…';
   try{ensureCtx();const f=await toMp3(r.blob,p=>{btn.textContent='MP3 maken… '+Math.round(p*100)+'%';});
-    const res=window.ZangcoachApp.share(await blobToB64(f),'zangcoach-opname-'+r.n+'.mp3','audio/mpeg');
+    const res=await bridgeFile(f,'zangcoach-opname-'+r.n+'.mp3','audio/mpeg','share');
     if(res!=='ok')msg('Delen lukte niet: '+res,true);}
   catch(e){msg('Delen lukte niet.',true);}
   btn.disabled=false;btn.textContent=old;
 }
 function normInfo(){const l=S.lastLufs;S.lastLufs=null;return l&&isFinite(l)?' Luidheid aangepast van '+Math.round(l)+' naar -14 LUFS (streamingvolume).':'';}
+// Bestand naar Android sturen: in stukjes van 768 kB (een veelvoud van 3, zodat elk stukje los base64 is).
+// dest: 'download' (map Download/Zangcoach) of 'share' (deel-menu). Oudere schil: alles in één keer.
+async function bridgeFile(blob,name,type,dest){
+  const A=window.ZangcoachApp;
+  if(A&&A.fileOpen){
+    const id=A.fileOpen(name,type,dest);if(!id||id.startsWith('fout'))return id||'fout';
+    const CH=786432;
+    for(let i=0;i<blob.size;i+=CH){
+      const r=A.fileWrite(id,abToB64(await blob.slice(i,i+CH).arrayBuffer()));
+      if(r!=='ok'){try{A.fileClose(id,false);}catch(_){}return r;}
+      await new Promise(res=>setTimeout(res,0));
+    }
+    return A.fileClose(id,true);
+  }
+  const b64=await blobToB64(blob);
+  return dest==='share'?A.share(b64,name,type):A.saveAudio(b64,name,type);
+}
 function blobToB64(blob){
   return new Promise((res,rej)=>{const fr=new FileReader();fr.onload=()=>res(String(fr.result).split(',')[1]);fr.onerror=rej;fr.readAsDataURL(blob);});
 }
@@ -2567,7 +2722,7 @@ async function downloadRec(r,btn){
       try{file=await toWav(r.blob);name='zangcoach-opname-'+r.n+'.wav';type='audio/wav';}catch(e2){}
     }
     if(window.ZangcoachApp&&window.ZangcoachApp.saveAudio){
-      const res=window.ZangcoachApp.saveAudio(await blobToB64(file),name,type);
+      const res=await bridgeFile(file,name,type,'download');
       if(res==='ok')msg('Opgeslagen in je map Download/Zangcoach als '+name+'.'+normInfo());
       else msg('Opslaan lukte niet: '+res,true);
     }else{
@@ -3193,6 +3348,7 @@ fixProject.partFix=(d,o)=>{
   // oudere delen hebben nog geen zang: die krijgen een leeg zangspoor (niet de zang van een ander deel)
   if(d.vocs===undefined)d.vocs=d.voc?(fixVocs(d),d.vocs):[defaultTrack(1)];
   delete d.voc;
+  if(d.mix!==undefined)d.mix=Object.assign(defaultProject().mix,cleanMix(d.mix));
   if(d.mix&&!d.mix.V)d.mix.V=clone(defaultProject().mix.V);
   for(const k of PART_KEYS)if(d[k]===undefined)d[k]=clone(o[k]);
   fixLayers(d);fixMel(d.mel);
@@ -3217,11 +3373,15 @@ function doSwitch(i,fromSched){
   S.undo=[];if(S.hum)cancelHum('Inneuriën gestopt omdat je van deel wisselde.');
   if(S.vrec)cancelVocRec('Zangopname gestopt omdat je van deel wisselde.');
   if(S.pick)S.pick=null;
-  refreshChords();
-  refreshVoc(true);renderVoc();
+  if(fromSched){S.chords=buildChords(musicKey(),P.prog,chordExt(P),P.cprog);setTimeout(()=>guard('scherm',()=>{renderChords();renderTransport();renderVoc();}),0);}
+  else{refreshChords();}
+  if(fromSched)doRefreshVoc();else{refreshVoc(true);renderVoc();}
   if(!fromSched){S.arpN=0;}
-  syncControls();renderProgs();renderSteps();renderDrumGrid();renderPads();renderPick();renderDrumMix();renderRack($('drumRack'),curBeatBus());renderMel();renderMixer();renderParts();syncKitSel();
-  preloadKit();preloadInst();applyMix();save();renderFlow();renderBeatLayers();renderChordLayers();if(S.cedit){S.cedit=null;renderCell();}
+  preloadKit();preloadInst();applyMix();save();
+  // vanuit de planner: het scherm pas bijwerken als de volgende noten al gepland zijn (geen hapering bij de wissel)
+  const ui=()=>{syncControls();renderProgs();renderSteps();renderDrumGrid();renderPads();renderPick();renderDrumMix();renderRack($('drumRack'),curBeatBus());renderMel();renderMixer();renderParts();syncKitSel();
+    renderFlow();renderBeatLayers();renderChordLayers();if(S.cedit){S.cedit=null;renderCell();}};
+  if(fromSched)setTimeout(()=>guard('scherm',ui),0);else ui();
 }
 function selectPart(i){
   if(S.songRun){S.songRun=false;S.queued=null;renderSong();msg('Songmodus gepauzeerd: je koos zelf een deel. Druk op ▶ Speel het nummer om opnieuw van voor af te beginnen.');}
@@ -3343,7 +3503,7 @@ function fxOn(fx){
   }else if(fx==='crush'){
     // het hele nummer door de bitcrusher (via het lo-fi-pad) zolang je drukt
     const q=12,n=4096,cv=new Float32Array(n);for(let i=0;i<n;i++){const v=i/(n-1)*2-1;cv[i]=Math.round(v*1.2*q)/q/1.2;}
-    S.shaper.curve=cv;S.lastLofi=-1;S.lofiLP.frequency.setTargetAtTime(3500,now,0.01);
+    S.shaper.curve=cv;S.lastLofi=-1;lofiPath(true);S.lofiLP.frequency.setTargetAtTime(3500,now,0.01);
     S.wet.gain.setTargetAtTime(1,now,0.01);S.dry.gain.setTargetAtTime(0,now,0.01);
   }else if(fx==='chop'){
     // volume aan en uit op elke zestiende, mooi in de maat met wat er speelt
@@ -3750,10 +3910,24 @@ const MEQ_PRESETS={vlak:['Vlak',[0,0,0,0,0]],bas:['Meer bas',[5,2,0,0,0]],helder
   dun:['Dun (oude cassette)',[-6,-2,2,-1,-5]],lucht:['Open en luchtig',[0,-1,0,1,5]],punch:['Punch (drums vooraan)',[3,-2,0,2,1]]};
 function buildMasterEQ(c){
   S.meq=MEQ.map(([ty,f])=>{const b=c.createBiquadFilter();b.type=ty;b.frequency.value=f;if(ty==='peaking')b.Q.value=0.9;return b;});
-  for(let i=0;i<S.meq.length-1;i++)S.meq[i].connect(S.meq[i+1]);
   // slimme EQ: 10 banden achter de eigen schuiven (zie seqAnalyse)
-  S.aeq=makeAeq(c);S.meq[S.meq.length-1].connect(S.aeq[0]);
-  return {inp:S.meq[0],out:S.aeq[S.aeq.length-1]};
+  S.aeq=AEQ.map(([ty,f,q])=>{const b=c.createBiquadFilter();b.type=ty;b.frequency.value=f;if(ty==='peaking')b.Q.value=q;b.gain.value=0;return b;});
+  // alleen banden die iets doen, zitten in de keten (zie eqWire)
+  S.eqIn=c.createGain();S.eqOut=c.createGain();S.eqChain=null;eqWire([]);
+  return {inp:S.eqIn,out:S.eqOut};
+}
+function eqWire(bands){
+  const key=bands.map(b=>[...S.meq,...S.aeq].indexOf(b)).join(',');if(key===S.eqChain)return;S.eqChain=key;
+  try{S.eqIn.disconnect();}catch(e){}
+  for(const b of [...S.meq,...S.aeq]){try{b.disconnect();}catch(e){}}
+  let prev=S.eqIn;for(const b of bands){prev.connect(b);prev=b;}prev.connect(S.eqOut);
+}
+// lo-fi-pad (en de Kapot-knop) alleen aansluiten als het nodig is; loskoppelen pas als het stil is
+function lofiPath(on){
+  if(!S.lofiLP)return;
+  clearTimeout(S.lofiOffT);
+  if(on){if(!S.lofiOn){S.lofiOn=true;S.filter.connect(S.lofiLP);}return;}
+  if(S.lofiOn)S.lofiOffT=setTimeout(()=>{if(S.lofiOn&&S.wet.gain.value<0.001){S.lofiOn=false;try{S.filter.disconnect(S.lofiLP);}catch(e){}}},300);
 }
 function meqVals(){const e=P.master.eq;return Array.isArray(e)&&e.length===5?e:[0,0,0,0,0];}
 function renderMasterEQ(){
@@ -3842,37 +4016,48 @@ async function decodeForSave(blob){
 // vervorming → bitcrush → tape-wobble → helderheid. Op 0 doen ze niets.
 S.autos=new Set();
 function buildRack(c){
+  // Elke bewerking is een losse "trap". Alleen de trappen die echt iets doen, zitten in de keten:
+  // een schuif op 0 kost zo geen rekenkracht (vroeger rekende alles altijd mee, ook op 0).
   const inp=c.createGain(),out=c.createGain();
   // vervorming
-  const dIn=inp,dDry=c.createGain(),dPre=c.createGain(),dSh=c.createWaveShaper(),dTone=c.createBiquadFilter(),dPost=c.createGain(),dWet=c.createGain(),dOut=c.createGain();
+  const dIn=c.createGain(),dDry=c.createGain(),dPre=c.createGain(),dSh=c.createWaveShaper(),dTone=c.createBiquadFilter(),dPost=c.createGain(),dWet=c.createGain(),dOut=c.createGain();
   const dIa=c.createAnalyser(),dOa=c.createAnalyser();dIa.fftSize=dOa.fftSize=2048;
   {const n=4096,cv=new Float32Array(n);for(let i=0;i<n;i++){const x=i/(n-1)*2-1;cv[i]=Math.tanh(x*3)/Math.tanh(3);}dSh.curve=cv;dSh.oversample='4x';}
   dTone.type='lowpass';
   dIn.connect(dDry);dDry.connect(dOut);dIn.connect(dIa);dIn.connect(dPre);dPre.connect(dSh);dSh.connect(dTone);dTone.connect(dPost);dPost.connect(dOa);dPost.connect(dWet);dWet.connect(dOut);
   const dAuto={ia:dIa,oa:dOa,pre:dPre,post:dPost,buf:new Float32Array(2048),target:0.3,boost:1,on:false};
   // bitcrush
-  const cDry=c.createGain(),cPre=c.createGain(),cSh=c.createWaveShaper(),cLp=c.createBiquadFilter(),cPost=c.createGain(),cWet=c.createGain(),cOut=c.createGain();
+  const cIn=c.createGain(),cDry=c.createGain(),cPre=c.createGain(),cSh=c.createWaveShaper(),cLp=c.createBiquadFilter(),cPost=c.createGain(),cWet=c.createGain(),cOut=c.createGain();
   const cIa=c.createAnalyser(),cOa=c.createAnalyser();cIa.fftSize=cOa.fftSize=2048;cLp.type='lowpass';
-  dOut.connect(cDry);cDry.connect(cOut);dOut.connect(cIa);dOut.connect(cPre);cPre.connect(cSh);cSh.connect(cLp);cLp.connect(cPost);cPost.connect(cOa);cPost.connect(cWet);cWet.connect(cOut);
+  cIn.connect(cDry);cDry.connect(cOut);cIn.connect(cIa);cIn.connect(cPre);cPre.connect(cSh);cSh.connect(cLp);cLp.connect(cPost);cPost.connect(cOa);cPost.connect(cWet);cWet.connect(cOut);
   const cAuto={ia:cIa,oa:cOa,pre:cPre,post:cPost,buf:new Float32Array(2048),target:0.25,boost:1,on:false};
   // tape-wobble: een vertraging die traag (wow) en snel (flutter) schommelt, zoals een oude cassette
-  const wDl=c.createDelay(0.05),wDry=c.createGain(),wWet=c.createGain(),wOut=c.createGain(),wLp=c.createBiquadFilter();
+  const wIn=c.createGain(),wDl=c.createDelay(0.05),wOut=c.createGain(),wLp=c.createBiquadFilter();
   wDl.delayTime.value=0.012;wLp.type='lowpass';
   const wow=c.createOscillator(),wowG=c.createGain(),flu=c.createOscillator(),fluG=c.createGain();
   wow.frequency.value=0.55;flu.frequency.value=6.3;wow.connect(wowG);flu.connect(fluG);wowG.connect(wDl.delayTime);fluG.connect(wDl.delayTime);wow.start();flu.start();
-  cOut.connect(wDry);wDry.connect(wOut);cOut.connect(wDl);wDl.connect(wLp);wLp.connect(wWet);wWet.connect(wOut);
+  wIn.connect(wDl);wDl.connect(wLp);wLp.connect(wOut);
   // helderheid
-  const tLp=c.createBiquadFilter();tLp.type='lowpass';tLp.Q.value=0.6;wOut.connect(tLp);
+  const tLp=c.createBiquadFilter();tLp.type='lowpass';tLp.Q.value=0.6;
   // 3-bands EQ
   const eL=c.createBiquadFilter(),eM=c.createBiquadFilter(),eH=c.createBiquadFilter();
   eL.type='lowshelf';eL.frequency.value=150;eM.type='peaking';eM.frequency.value=1000;eM.Q.value=0.8;eH.type='highshelf';eH.frequency.value=5000;
-  tLp.connect(eL);eL.connect(eM);eM.connect(eH);
   // compressie: zachte delen omhoog, pieken omlaag = meer punch en een gelijkmatiger spoor
   const cmp=c.createDynamicsCompressor(),mk=c.createGain();cmp.threshold.value=0;cmp.ratio.value=1;cmp.knee.value=6;cmp.attack.value=0.012;cmp.release.value=0.15;
-  eH.connect(cmp);cmp.connect(mk);mk.connect(out);
+  cmp.connect(mk);
+  const ST={dist:[dIn,dOut],crush:[cIn,cOut],wob:[wIn,wOut],tone:[tLp,tLp],el:[eL,eL],em:[eM,eM],eh:[eH,eH],comp:[cmp,mk]};
+  const ORDER=['dist','crush','wob','tone','el','em','eh','comp'];
+  let chain=null;
+  const wire=on=>{
+    const key=on.join(',');if(key===chain)return;chain=key;
+    try{inp.disconnect();}catch(e){}
+    for(const k of ORDER){try{ST[k][1].disconnect();}catch(e){}}
+    let prev=inp;for(const k of on){prev.connect(ST[k][0]);prev=ST[k][1];}prev.connect(out);
+  };
+  wire(['comp']);
   let lastBits=0;
   const set=(m,t)=>{
-    const dr=m.dr||0,cr=m.cr||0,wo=m.wo||0,tf=m.tf==null?1:m.tf;
+    const dr=m.dr||0,cr=m.cr||0,wo=m.wo||0,tf=m.tf==null?1:m.tf,el=m.el||0,em=m.em||0,eh=m.eh||0,cp=m.cp||0;
     dAuto.on=dr>0;dWet.gain.setTargetAtTime(dr>0?1:0,t,0.02);dDry.gain.setTargetAtTime(dr>0?0.15*(1-dr):1,t,0.02);
     dAuto.target=0.12+1.6*dr;dAuto.boost=1+0.15*dr;dTone.frequency.value=7500-3500*dr;
     if(dr>0)S.autos.add(dAuto);else S.autos.delete(dAuto);
@@ -3881,14 +4066,15 @@ function buildRack(c){
     if(cr>0&&bits!==lastBits){lastBits=bits;const q=Math.pow(2,bits),n=4096,cv=new Float32Array(n);for(let i=0;i<n;i++){const v=i/(n-1)*2-1;cv[i]=Math.round(v*q)/q;}cSh.curve=cv;}
     cLp.frequency.value=10000-6500*cr;
     if(cr>0)S.autos.add(cAuto);else S.autos.delete(cAuto);
-    wWet.gain.setTargetAtTime(wo>0?1:0,t,0.02);wDry.gain.setTargetAtTime(wo>0?0:1,t,0.02);
     wowG.gain.setTargetAtTime(0.0035*wo,t,0.05);fluG.gain.setTargetAtTime(0.00035*wo,t,0.05);wLp.frequency.value=16000-10000*wo;
     tLp.frequency.setTargetAtTime(Math.min(20000,180*Math.pow(110,tf)),t,0.03);
-    eL.gain.setTargetAtTime(m.el||0,t,0.03);eM.gain.setTargetAtTime(m.em||0,t,0.03);eH.gain.setTargetAtTime(m.eh||0,t,0.03);
+    eL.gain.setTargetAtTime(el,t,0.03);eM.gain.setTargetAtTime(em,t,0.03);eH.gain.setTargetAtTime(eh,t,0.03);
     // de compressor zet zelf het volume terug omhoog (automatische make-up), dus hier niets extra
-    const cp=m.cp||0;cmp.threshold.value=-34*cp;cmp.ratio.value=1+11*cp;mk.gain.setTargetAtTime(1,t,0.05);
+    cmp.threshold.value=-34*cp;cmp.ratio.value=1+11*cp;mk.gain.setTargetAtTime(1,t,0.05);
+    // de compressor blijft altijd in de keten: ook neutraal geeft hij het spoor zijn vertrouwde volume en timing
+    wire(ORDER.filter(k=>k==='dist'?dr>0:k==='crush'?cr>0:k==='wob'?wo>0:k==='tone'?tf<0.995:k==='el'?el!==0:k==='em'?em!==0:k==='eh'?eh!==0:true));
   };
-  return {inp,out,set};
+  return {inp,out,set,chain:()=>chain};
 }
 // [sleutel, naam, uitleg, min, max, standaard, eenheid]
 const RACK=[['dr','Vervorming','warm → kapot',0,100,0,'%'],['cr','Bitcrush','oude computer',0,100,0,'%'],['wo','Tape-wobble','zwalpende cassette',0,100,0,'%'],
@@ -4167,21 +4353,23 @@ async function exportAll(){
   const btn=$('bkExport');btn.disabled=true;const old=btn.textContent;btn.textContent='Back-up maken…';
   try{
     syncMel(P.mel);try{localStorage.setItem(STORE,JSON.stringify(P));}catch(e){}
-    const data={app:'zangcoach',v:1,at:new Date().toISOString(),project:P,slots:{},latfix:latFix(),takes:[]};
+    const data={app:'zangcoach',v:1,at:new Date().toISOString(),appv:typeof APPV!=='undefined'?APPV:'',project:P,slots:{},latfix:latFix(),takes:[],recs:[],
+      fouten:JSON.parse(localStorage.getItem('zangcoach-fouten')||'[]'),redding:localStorage.getItem(STORE+'-redding')||null};
     for(let i=1;i<=4;i++){const j=localStorage.getItem(STORE+'-slot'+i);if(j)data.slots[i]=JSON.parse(j);}
     let keys=[];try{keys=await VDB.keys();}catch(e){}
     for(const k of keys){const o=await VDB.get(k);if(o)data.takes.push(Object.assign({},o,{pcm:abToB64(o.pcm)}));}
     try{data.samples=await smpExport();}catch(e){data.samples=[];}
+    try{let tot=0;for(const r of S.recs){tot+=r.blob.size;if(tot>30*1048576)break;data.recs.push({n:r.n,ext:r.ext,len:r.len,at:r.at||0,type:r.blob.type,b64:abToB64(await r.blob.arrayBuffer())});}}catch(e){data.recs=[];}
     const raw=new Blob([JSON.stringify(data)],{type:'application/json'}),file=await gzipBlob(raw);
     const d=new Date(),name='zangcoach-backup-'+d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+'.zcb';
     const mb=(file.size/1048576).toFixed(1);
     if(window.ZangcoachApp&&window.ZangcoachApp.saveAudio){
-      const res=window.ZangcoachApp.saveAudio(await blobToB64(file),name,'application/octet-stream');
-      if(res==='ok')msg('Back-up bewaard in Download/Zangcoach als '+name+' ('+mb+' MB, '+data.takes.length+' zangopnames, '+data.samples.length+' samples).');
+      const res=await bridgeFile(file,name,'application/octet-stream','download');
+      if(res==='ok')msg('Back-up bewaard in Download/Zangcoach als '+name+' ('+mb+' MB, '+data.takes.length+' zangopnames, '+data.samples.length+' samples, '+data.recs.length+' mix-opnames).');
       else msg('Back-up bewaren lukte niet: '+res,true);
     }else{
       const a=document.createElement('a');a.href=URL.createObjectURL(file);a.download=name;document.body.appendChild(a);a.click();a.remove();
-      msg('Back-up gedownload als '+name+' ('+mb+' MB, '+data.takes.length+' zangopnames, '+data.samples.length+' samples).');
+      msg('Back-up gedownload als '+name+' ('+mb+' MB, '+data.takes.length+' zangopnames, '+data.samples.length+' samples, '+data.recs.length+' mix-opnames).');
     }
   }catch(e){msg('Back-up maken lukte niet: '+(e&&e.message||e),true);}
   btn.disabled=false;btn.textContent=old;
@@ -4199,13 +4387,14 @@ async function importAll(file){
     if(S.playing)stop();
     for(const t of data.takes||[]){await VDB.put(Object.assign({},t,{pcm:b64ToAb(t.pcm)}));S.vtakes.delete(t.id);}
     if(data.samples)await smpImport(data.samples);
+    for(const r of data.recs||[]){if(S.recs.some(x=>x.n===r.n&&x.at===r.at))continue;await recAdd(new Blob([b64ToAb(r.b64)],{type:r.type||'audio/webm'}),r.ext,r.len,r.at);}
     S.vcache.clear(); // eerder 'niet gevonden' vergeten: de opnames zijn er nu weer
     for(let i=1;i<=4;i++){if(data.slots&&data.slots[i])localStorage.setItem(STORE+'-slot'+i,JSON.stringify(data.slots[i]));}
     if(data.latfix!=null)setLatFix(data.latfix);
     P=fixProject(data.project);save();syncControls();
     $('tonicSel').value=String(P.key.tonic);$('modeSel').value=P.key.m;
     renderAll();applyMix();
-    msg('Back-up teruggezet: je nummer, '+Object.keys(data.slots||{}).length+' bewaarde plekken en '+(data.takes||[]).length+' zangopnames'+(data.samples&&data.samples.length?' en '+data.samples.length+' samples':'')+'.');
+    msg('Back-up teruggezet: je nummer, '+Object.keys(data.slots||{}).length+' bewaarde plekken en '+(data.takes||[]).length+' zangopnames'+(data.samples&&data.samples.length?', '+data.samples.length+' samples':'')+(data.recs&&data.recs.length?' en '+data.recs.length+' mix-opnames':'')+'.');
   }catch(e){msg('Terugzetten lukte niet: '+(e&&e.message||e),true);}
 }
 function setupBackup(){
@@ -4297,13 +4486,15 @@ function takeData(id){
 // Opruimen bij het opstarten: opnames die nergens meer gebruikt worden (ook niet in een bewaarde plek)
 // en ouder zijn dan een dag, gaan weg.
 async function vocGC(){
-  if(!S.loadOk&&localStorage.getItem(STORE))return; // project niet goed geladen: niets weggooien
+  if((!S.loadOk||S.loadBroken)&&localStorage.getItem(STORE))return; // project niet goed geladen: niets weggooien
   try{
     const used=new Set();
     const addD=d=>{if(!d)return;if(d.voc&&d.voc.take)used.add(d.voc.take);(d.vocs||[]).forEach(t=>{if(t&&t.take)used.add(t.take);});};
     const add=p=>{if(!p)return;addD(p);(p.parts||[]).forEach(pt=>addD(pt.data));};
     add(P);
     for(let i=1;i<=4;i++){const j=localStorage.getItem(STORE+'-slot'+i);if(j)add(JSON.parse(j));}
+    for(const k of ['-redding']){const j=localStorage.getItem(STORE+k);if(j)try{add(JSON.parse(j));}catch(_){}}
+    try{const o=await SAFE.get('cur');if(o&&o.json)add(JSON.parse(o.json));}catch(_){}
     const keys=await VDB.keys(),day=864e5;
     for(const k of keys){
       const t=parseInt(String(k).slice(1).split('-')[0],36);
@@ -6136,7 +6327,7 @@ function init(){
 
   syncControls();
   $('tonicSel').value=String(P.key.tonic);$('modeSel').value=P.key.m;
-  renderPads();renderRecs();renderPlay();
+  renderPads();renderRecs();renderPlay();recInit();
 
   document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
   $('keyChip').onclick=()=>showTab('stem');
@@ -6253,9 +6444,19 @@ function init(){
     const li=LIVEKEYS.indexOf(k);
     if(li>=0&&li<rowsOf(S.track)){hitKey(li);}
   });
-  renderAll();
+  try{renderAll();}
+  catch(e){
+    // dit nummer laat de app niet opstarten: apart zetten en met een leeg nummer beginnen
+    zcErr(e,'opstarten');
+    try{localStorage.setItem(STORE+'-redding',JSON.stringify(P));}catch(_){}
+    S.loadOk=false;S.loadBroken=true;P=defaultProject();
+    try{syncControls();renderAll();}catch(e2){zcErr(e2,'opstarten (leeg)');}
+    msg('Je nummer kon niet geopend worden. Het staat apart (redding); stuur een back-up door als je het terug wil. Je begint met een leeg nummer.',true);
+  }
   requestAnimationFrame(tick);
-  vocGC();
+  restoreCheck().finally(vocGC);
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)flushSave();});
+  window.addEventListener('pagehide',flushSave);
 }
 init();
 </script>

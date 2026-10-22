@@ -55,6 +55,7 @@ class Bridge(private val activity: MainActivity) {
     fun playing(on: Boolean) {
         activity.runOnUiThread {
             if (on) PlaybackService.start(activity) else PlaybackService.stop(activity)
+            activity.audioGuard.setPlaying(on)
         }
     }
 
@@ -69,7 +70,17 @@ class Bridge(private val activity: MainActivity) {
     @JavascriptInterface
     fun micStop() { activity.mic.stop() }
 
+    /** Bestand in stukjes doorsturen: open (geeft een id of "fout: ..."), schrijven (base64), sluiten. dest = "download" of "share". */
+    @JavascriptInterface
+    fun fileOpen(name: String, mime: String, dest: String): String = activity.files.open(name, mime, dest)
+
+    @JavascriptInterface
+    fun fileWrite(id: String, b64: String): String = activity.files.write(id, b64)
+
+    @JavascriptInterface
+    fun fileClose(id: String, keep: Boolean): String = activity.files.close(id, keep)
+
     /** Laat de pagina weten welke extra's deze schil kan. */
     @JavascriptInterface
-    fun features(): String = "save,share,playing,pick,mic"
+    fun features(): String = "save,share,playing,pick,mic,file,focus"
 }
