@@ -224,6 +224,14 @@ input[type=range]{width:100%;accent-color:var(--amber)}
 .prog small{color:var(--muted)}
 .prog.on{border-color:var(--amber);background:var(--amber-soft)}
 .prog .song{color:var(--ink);font-weight:600;font-size:12px}
+.prog.own{border-style:dashed}
+.prog.own.on{border-style:solid}
+.cpedit .chips{margin:4px 0 0}
+.cpedit .cplist .chip{display:inline-flex;flex-direction:column;align-items:center;line-height:1.15;padding:5px 12px}
+.cpedit .cplist .chip small{font:500 10px var(--f-mono);color:var(--muted)}
+.cpedit .cplist .chip.on small{color:var(--ink)}
+.cpedit .pal .chip small{font:500 10px var(--f-mono);color:var(--muted);margin-left:4px}
+#cpText{flex:1 1 160px;min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 10px;font:inherit;color:inherit}
 .chordrow{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 0}
 .chord{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px 4px;text-align:center;
   display:flex;flex-direction:column;gap:2px;min-width:0}
@@ -669,6 +677,7 @@ input[type=range]{width:100%;accent-color:var(--amber)}
       <div class="row lbar"><h2 class="label" id="h-chords" style="margin:0">Akkoorden</h2><div id="chordLayers" class="chips" style="margin:0"></div></div>
       <p class="hint" style="margin:6px 0 10px">Tot 3 akkoordlagen tegelijk, bv. een pad en een arpeggio. Ze volgen dezelfde akkoorden, elk met een eigen ritme, klank en mixerspoor.</p>
       <div id="progList" class="proglist"></div>
+      <div id="cpEdit" class="pick cpedit" style="--c:var(--amber)" hidden></div>
       <div id="chordRow" class="chordrow"></div>
       <div id="stepGrid" class="steps" aria-hidden="true"></div>
       <p id="rhythmDesc" class="steps-cap"></p>
@@ -1231,8 +1240,11 @@ const PROGS={
 };
 function chordName(root,q,sev,seventh,k,flat){
   const n=flat?FLAT[root]:noteName(root,k),e=sev===true?7:(+sev||0);
+  if(q==='sus4'||q==='sus2')return n+(e?'7':'')+q;
+  if(q==='aug')return n+'+'+(e?'7':'');
   if(q==='maj'){if(!e)return n;const t=e>=13?'13':e>=9?'9':'7';return n+(seventh===11?'maj'+t:t);}
   if(q==='min')return n+'m'+(e>=13?'11':e>=9?'9':e?'7':'');
+  if(e&&seventh===9)return n+'°7';
   return n+(e>=9?'m11♭5':e?'m7♭5':'°');
 }
 // Akkoordkleur van een nummer of deel: 0 = drieklank, 7, 9 of 13 (oudere nummers: P.sev aan = 7).
@@ -1253,14 +1265,20 @@ function voice(pcs,prev){
   }
   return best;
 }
-function buildChords(key,progIdx,sev){
-  const list=PROGS[key.mode]; const prog=list[progIdx%list.length];
+// Eigen akkoorden (P.cprog) staan als {off: halve tonen boven de grondtoon van de toonsoort, q: soort},
+// zodat ze meeschuiven als je van toonsoort verandert. progIdx -1 = eigen akkoorden.
+const CQ={maj:[4,7],min:[3,7],dim:[3,6],aug:[4,8],sus4:[5,7],sus2:[2,7]};
+function buildChords(key,progIdx,sev,custom){
+  let items;
+  if(progIdx===-1&&Array.isArray(custom)&&custom.length)items=custom.map(c=>{const r=romanOf(c.off,c.q,key.mode);return {sym:r,d:{off:c.off,q:CQ[c.q]?c.q:'maj',flat:r.startsWith('b'),e:c.e||0,s:c.s}};});
+  else{const list=PROGS[key.mode],prog=list[Math.max(0,progIdx)%list.length];items=prog.c.map(sym=>({sym,d:parseRoman(sym,key.mode)}));}
   let prev=null;
-  return prog.c.map(sym=>{
-    const d=parseRoman(sym,key.mode); const root=(key.tonic+d.off)%12;
-    const sv=seventhFor(d.off,d.q,key.mode),ext=sev===true?7:(+sev||0);
-    const ivs=[0,d.q==='maj'?4:3,d.q==='dim'?6:7];
-    if(ext) ivs.push(d.q==='dim'?10:sv);
+  return items.map(({sym,d})=>{
+    const root=(key.tonic+d.off)%12;
+    // per akkoord kan een eigen kleur (e) en soort septiem (s: '7' of 'maj7') bovenop de algemene akkoordkleur
+    const sv=d.s==='maj7'?11:d.s==='7'?10:seventhFor(d.off,d.q,key.mode),ext=Math.max(sev===true?7:(+sev||0),d.e||0);
+    const ivs=[0,CQ[d.q][0],CQ[d.q][1]];
+    if(ext) ivs.push(d.q==='dim'?(d.s==='dim7'?9:10):sv);
     // jazz: none erbij; neo-soul: 13 (majeur) of 11 (mineur, verminderd)
     if(ext>=9) ivs.push(d.q==='dim'?17:14);
     if(ext>=13) ivs.push(d.q==='maj'?21:17);
@@ -1268,7 +1286,7 @@ function buildChords(key,progIdx,sev){
     // vanaf 9: zonder grondtoon en kwint in de rechterhand (de bas of linkerhand speelt de grondtoon), zoals een jazzpianist
     const up=ext>=9?[...new Set(ivs.filter(i=>i!==0&&i!==7).map(i=>(root+i)%12))]:pcs;
     const voicing=voice(up,prev); prev=voicing;
-    return {sym,root,pcs,voicing,bass:36+root,ext,iv:ivs,name:chordName(root,d.q,ext,sv,key,d.flat)};
+    return {sym,root,pcs,voicing,bass:36+root,ext,iv:ivs,name:chordName(root,d.q,ext,d.q==='dim'&&d.s==='dim7'?9:sv,key,d.flat)};
   });
 }
 function arpSeq(v){return v.concat(v.slice(1,-1).reverse());}
@@ -1520,7 +1538,7 @@ function defaultProject(){
     v:3,bpm:90,swing:0,ts:'4/4',bars:1,glitch:0,metro:false,
     drums:emptyDrums(),dmute:{},kit:{},dprob:{},drat:{},dtune:{},ddec:{},dvol:{},dpan:{},drev:{},dsl:{},dslc:{},dstn:{},dsln:{},drgl:{},dvar:{},fill:true,
     mel:{A:{notes:[],inst:'ondes',oct:4,len:2,follow:false,vars:[[]],seq:[0],ed:0},B:{notes:[],inst:'sub',oct:2,len:4,follow:true,vars:[[]],seq:[0],ed:0}},
-    prog:0,sev:false,ext:0,twin:false,dlay:[],dcur:0,clay:[],ccur:0,rhythm:'pad',chordInst:'auto',chordFeel:40,change:'bar',
+    prog:0,cprog:[],sev:false,ext:0,twin:false,dlay:[],dcur:0,clay:[],ccur:0,rhythm:'pad',chordInst:'auto',chordFeel:40,change:'bar',
     mix:{drums:{v:.8,m:false,r:.1,d:0},chords:{v:.7,m:false,r:.3,d:0},A:{v:.8,m:false,r:.35,d:.2},B:{v:.8,m:false,r:0,d:0},V:{v:.9,m:false,r:.2,d:0}},
     vocs:[defaultTrack(1)],
     master:{v:.8,filter:100,lofi:0,dly:3,fb:35,vinyl:0},color:{A:'normaal',B:'normaal',chords:'normaal'},
@@ -1560,7 +1578,7 @@ function fixProject(p){
   if(!RHYTHMS.some(r=>r.id===o.rhythm))o.rhythm='pad';
   o.dmute=o.dmute||{};
   o.kit=o.kit||{};
-  o.dprob=o.dprob||{};o.drat=o.drat||{};o.dtune=o.dtune||{};o.ddec=o.ddec||{};o.dvol=o.dvol||{};o.dpan=o.dpan||{};o.drev=o.drev||{};o.dsl=o.dsl||{};o.dslc=o.dslc||{};o.dstn=o.dstn||{};o.dsln=o.dsln||{};o.drgl=o.drgl||{};o.dvar=o.dvar||{};if(o.ext==null)o.ext=o.sev?7:0;o.twin=!!o.twin;fixLayers(o);if(typeof o.lyrics!=='string')o.lyrics='';if(!Array.isArray(o.song))o.song=[];if(!Array.isArray(o.flow))o.flow=[];if(o.fill===undefined)o.fill=true;
+  o.dprob=o.dprob||{};o.drat=o.drat||{};o.dtune=o.dtune||{};o.ddec=o.ddec||{};o.dvol=o.dvol||{};o.dpan=o.dpan||{};o.drev=o.drev||{};o.dsl=o.dsl||{};o.dslc=o.dslc||{};o.dstn=o.dstn||{};o.dsln=o.dsln||{};o.drgl=o.drgl||{};o.dvar=o.dvar||{};o.cprog=fixCprog(o.cprog);if(o.prog===-1&&!o.cprog.length)o.prog=0;if(o.ext==null)o.ext=o.sev?7:0;o.twin=!!o.twin;fixLayers(o);if(typeof o.lyrics!=='string')o.lyrics='';if(!Array.isArray(o.song))o.song=[];if(!Array.isArray(o.flow))o.flow=[];if(o.fill===undefined)o.fill=true;
   o.color=Object.assign({A:'normaal',B:'normaal',chords:'normaal'},o.color||{});
   // vanaf v3 staat er een snelle start vooraan: de gemarkeerde start één plek opschuiven
   if(p&&(p.v||2)<3&&o.scene>=0)o.scene++;
@@ -2791,6 +2809,11 @@ function renderProgs(){
   const mode=musicKey().mode,list=PROGS[mode];
   if(P.prog>=list.length)P.prog=0;
   const box=$('progList');box.innerHTML='';
+  {const b=document.createElement('button');b.type='button';b.className='prog own'+(P.prog===-1?' on':'');
+    const names=P.cprog&&P.cprog.length?buildChords(musicKey(),-1,0,P.cprog).map(c=>c.name).join(' – '):'Kies of typ zelf je akkoorden';
+    b.innerHTML='<span class="mono">✎ '+esc(names)+'</span><small>Eigen akkoorden</small>';
+    b.onclick=()=>{if(P.prog!==-1){if(!P.cprog||!P.cprog.length)P.cprog=presetToCustom(P.prog);P.prog=-1;S.cpSel=P.cprog.length-1;save();renderProgs();refreshChords();renderMelAll();}};
+    box.appendChild(b);}
   list.forEach((p,i)=>{
     const b=document.createElement('button');b.type='button';
     b.className='prog'+(i===P.prog?' on':'');
@@ -2798,21 +2821,21 @@ function renderProgs(){
     b.onclick=()=>{P.prog=i;save();renderProgs();refreshChords();renderMelAll();};
     box.appendChild(b);
   });
+  renderCpEdit();
 }
 function refreshChords(){
   const key=musicKey();
-  S.chords=buildChords(key,P.prog,chordExt(P));
+  S.chords=buildChords(key,P.prog,chordExt(P),P.cprog);
   renderChords();renderTransport();
 }
 function renderChords(){
   const row=$('chordRow');row.innerHTML='';
   const key=musicKey();
-  const prog=PROGS[key.mode][P.prog%PROGS[key.mode].length];
   row.style.gridTemplateColumns='repeat('+Math.min(4,S.chords.length)+',1fr)';
   S.chords.forEach((c,i)=>{
     const d=document.createElement('div');
     d.className='chord'+(S.playing&&i===S.curIdx?' on':'');
-    d.innerHTML='<b>'+c.name+'</b><span class="mono">'+prog.c[i]+'</span>';
+    d.innerHTML='<b>'+c.name+'</b><span class="mono">'+c.sym+'</span>';
     row.appendChild(d);
   });
 }
@@ -3163,7 +3186,7 @@ function renderPads(){
 
 /* ---------- delen (couplet, refrein, bridge...) ---------- */
 // Wat bij een deel hoort. De rest (tempo, toonsoort, mix, effecten) geldt voor het hele nummer.
-const PART_KEYS=['drums','dmute','dprob','drat','dtune','ddec','dvol','dpan','drev','dsl','dslc','dstn','dsln','drgl','dvar','dlay','dcur','clay','ccur','kit','mel','prog','sev','ext','twin','flow','rhythm','chordInst','chordFeel','change','ts','bars','color','mix','master','vocs'];
+const PART_KEYS=['drums','dmute','dprob','drat','dtune','ddec','dvol','dpan','drev','dsl','dslc','dstn','dsln','drgl','dvar','dlay','dcur','clay','ccur','kit','mel','prog','cprog','sev','ext','twin','flow','rhythm','chordInst','chordFeel','change','ts','bars','color','mix','master','vocs'];
 const PART_NAMES=['Couplet','Refrein','Bridge','Intro','Outro','Pre-refrein','Drop','Breakdown'];
 const PART_COLS=['#D9A92E','#E0703A','#4C8FD6','#4FAF5A','#8E7CD8','#C9577E','#2FA39B','#8F99A3'];
 fixProject.partFix=(d,o)=>{
@@ -4466,7 +4489,8 @@ function vocSpec(pd,v){
   const s={take:v.take,fx,tune:fx==='robot'?'uit':(v.tune||'uit'),down:fx==='laag'?(v.down||5):fx==='karakter'?-(v.kp==null?-5:v.kp):0,nudge:v.nudge||0,kt:key.tonic,km:key.mode};
   if(fx==='karakter')s.form=v.form==null?-3:v.form;
   if(v.move)s.move=v.move;
-  if(fx==='robot'){s.ch=buildChords(key,pd.prog||0,chordExt(pd)).map(c=>c.voicing);s.cl=chordLenOf(pd.ts,pd.change);}
+  if(fx==='robot'){s.ch=buildChords(key,pd.prog||0,chordExt(pd),pd.cprog).map(c=>c.voicing);
+    if(pd.prog===-1)s.cp=JSON.stringify(pd.cprog);s.cl=chordLenOf(pd.ts,pd.change);}
   s.k=JSON.stringify(s);return s;
 }
 function refreshVoc(now){
@@ -5919,6 +5943,111 @@ function fadeBus(b,toMute,code){
   msg(busName(b)+(toMute?' fadet uit':' fadet in')+' over '+fadeName(code!=null?code:m.fd)+'.');
   clearTimeout((S.fadeT=S.fadeT||{})[b]);
   S.fadeT[b]=setTimeout(()=>{S.fadeUntil[b]=0;applyMix();if(S.tab==='mix')renderMixer();},dur*1000+80);
+}
+
+
+/* ---------- eigen akkoorden ---------- */
+const ROMAN=['I','II','III','IV','V','VI','VII'];
+// trap van een akkoord in de toonsoort, bv. vi, bVII, IV, ii°, Isus4
+function romanOf(off,q,mode){
+  const sc=SCALE_OFF[mode];let i=sc.indexOf(off),acc='';
+  // in mineur zijn de verhoogde 3, 6 en 7 (#III, #vi, #vii, bv. G# in a-mineur) gewoner dan een verlaagde trap erboven
+  const sharp=mode==='minor'&&(off===4||off===9||off===11);
+  if(i<0&&sharp){i=sc.indexOf((off+11)%12);acc='#';}
+  if(i<0){i=sc.indexOf((off+1)%12);acc='b';}
+  if(i<0){i=sc.indexOf((off+11)%12);acc='#';}
+  if(i<0){i=0;acc='?';}
+  let r=ROMAN[i];if(q==='min'||q==='dim')r=r.toLowerCase();
+  return acc+r+(q==='dim'?'°':q==='aug'?'+':q==='sus4'?'sus4':q==='sus2'?'sus2':'');
+}
+function fixCprog(a){return (Array.isArray(a)?a:[]).filter(c=>c&&c.off>=0&&c.off<12&&CQ[c.q]).slice(0,16).map(c=>{const o={off:c.off|0,q:c.q};if([7,9,13].includes(c.e))o.e=c.e;if(c.s==='7'||c.s==='maj7'||c.s==='dim7')o.s=c.s;return o;});}
+function presetToCustom(i){const mode=musicKey().mode,list=PROGS[mode],p=list[Math.max(0,i)%list.length];return p.c.map(sym=>{const d=parseRoman(sym,mode);return {off:d.off,q:d.q};});}
+// akkoorden uit de toonsoort, en geleende voor extra kleur
+function cpPalette(mode){
+  const dia=mode==='major'?[[0,'maj'],[2,'min'],[4,'min'],[5,'maj'],[7,'maj'],[9,'min'],[11,'dim']]:[[0,'min'],[2,'dim'],[3,'maj'],[5,'min'],[7,'min'],[8,'maj'],[10,'maj']];
+  const bor=mode==='major'?[[5,'min'],[10,'maj'],[3,'maj'],[8,'maj'],[2,'maj'],[4,'maj'],[0,'sus4'],[7,'sus4']]:[[7,'maj'],[5,'maj'],[1,'maj'],[0,'maj'],[3,'min'],[10,'min'],[0,'sus2'],[7,'sus4']];
+  return {dia,bor};
+}
+const CQN=[['maj','Majeur'],['min','Mineur'],['sus4','sus4'],['sus2','sus2'],['dim','Verminderd'],['aug','Overmatig']];
+function cpName(c){return buildChords(musicKey(),-1,0,[c])[0].name;}
+const CEX=[['0','Geen'],['7','7'],['maj7','maj7'],['9','9'],['13','13']];
+function cexOf(c){return !c.e?'0':c.e===7?(c.s==='maj7'?'maj7':'7'):String(c.e);}
+function cpPlay(c){
+  ensureCtx();S.ctx.resume();
+  const ch=buildChords(musicKey(),-1,chordExt(P),[c])[0],inst=chordInstNow()||'piano',t=S.ctx.currentTime+0.02,out=dest(curChordBus());
+  synth(inst,36+ch.root+(ch.root<4?12:0),t,1.1,0.1,out,{vib:false});
+  voicingFor(inst,ch).forEach((m,i)=>synth(inst,m,t+i*0.012,1.1,0.075,out,{vib:false}));
+}
+function cpChanged(){P.cprog=fixCprog(P.cprog);save();refreshChords();renderMelAll();renderProgs();}
+function renderCpEdit(){
+  const box=$('cpEdit');if(!box)return;
+  box.hidden=P.prog!==-1;if(P.prog!==-1){box.innerHTML='';return;}
+  const key=musicKey(),cp=P.cprog=fixCprog(P.cprog);
+  if(!cp.length)cp.push({off:0,q:key.mode==='major'?'maj':'min'});
+  S.cpSel=Math.max(0,Math.min(cp.length-1,S.cpSel==null?cp.length-1:S.cpSel));
+  const sel=cp[S.cpSel];
+  box.innerHTML='<div class="row"><b>Jouw akkoorden</b><span class="spacer"></span><span class="muted" style="font-size:12px">'+cp.length+' van 16</span></div>'+
+    '<div class="chips cplist"></div>'+
+    '<div class="row" style="margin-top:8px"><button type="button" class="btn sm cpl" aria-label="Naar links">◀</button><button type="button" class="btn sm cpr" aria-label="Naar rechts">▶</button>'+
+    '<button type="button" class="btn sm cpp">▶ Beluister</button><button type="button" class="btn sm cpd">Verwijder</button></div>'+
+    '<div class="f" style="margin-top:10px"><span>Soort akkoord ('+esc(cpName(sel))+')</span><div class="chips cpq"></div></div>'+
+    '<div class="f" style="margin-top:10px"><span>Extra kleur voor dit akkoord</span><div class="chips cpx"></div></div>'+
+    '<div class="f" style="margin-top:10px"><span>Akkoorden uit '+esc(keyName(key))+'</span><div class="chips pal cpdia"></div></div>'+
+    '<div class="f" style="margin-top:10px"><span>Geleend, voor extra kleur</span><div class="chips pal cpbor"></div></div>'+
+    '<div class="row" style="margin-top:12px"><input type="text" id="cpText" placeholder="Of typ: Am F C G  (of vi IV I V)" aria-label="Typ je akkoorden"><button type="button" class="btn sm primary cpt">Gebruik</button></div>'+
+    '<p class="hint" style="margin:6px 0 0">Tik op een akkoord in je reeks om het te kiezen, en dan op een akkoord hieronder om het te vervangen. Met ＋ zet je er een bij. De akkoorden schuiven mee als je van toonsoort verandert. Bij Extra kleur geef je één akkoord een septiem of none (bv. alleen G7); Akkoordkleur hierboven doet dat voor alle akkoorden samen.</p>';
+  const list=box.querySelector('.cplist');
+  cp.forEach((c,i)=>{const b=document.createElement('button');b.type='button';b.className='chip'+(i===S.cpSel?' on':'');
+    b.innerHTML=esc(cpName(c))+'<small>'+esc(romanOf(c.off,c.q,key.mode))+'</small>';
+    b.onclick=()=>{S.cpSel=i;cpPlay(c);renderCpEdit();};list.appendChild(b);});
+  if(cp.length<16){const a=document.createElement('button');a.type='button';a.className='chip';a.textContent='＋';a.setAttribute('aria-label','Akkoord toevoegen');
+    a.onclick=()=>{cp.splice(S.cpSel+1,0,Object.assign({},sel));S.cpSel++;cpChanged();};list.appendChild(a);}
+  const mv=d=>{const j=S.cpSel+d;if(j<0||j>=cp.length)return;[cp[S.cpSel],cp[j]]=[cp[j],cp[S.cpSel]];S.cpSel=j;cpChanged();};
+  box.querySelector('.cpl').onclick=()=>mv(-1);box.querySelector('.cpr').onclick=()=>mv(1);
+  box.querySelector('.cpl').disabled=S.cpSel===0;box.querySelector('.cpr').disabled=S.cpSel>=cp.length-1;
+  box.querySelector('.cpp').onclick=()=>cpPlay(sel);
+  const del=box.querySelector('.cpd');del.disabled=cp.length<2;del.onclick=()=>{cp.splice(S.cpSel,1);S.cpSel=Math.max(0,S.cpSel-1);cpChanged();};
+  const qb=box.querySelector('.cpq');
+  CQN.forEach(([q,n])=>{const b=document.createElement('button');b.type='button';b.className='chip'+(sel.q===q?' on':'');b.textContent=n;b.onclick=()=>{sel.q=q;cpPlay(sel);cpChanged();};qb.appendChild(b);});
+  const xb=box.querySelector('.cpx');
+  CEX.forEach(([v,n])=>{if(v==='maj7'&&sel.q!=='maj'&&sel.q!=='sus4'&&sel.q!=='sus2')return;
+    const b=document.createElement('button');b.type='button';b.className='chip'+(cexOf(sel)===v?' on':'');b.textContent=n;
+    b.onclick=()=>{if(v==='0'){delete sel.e;delete sel.s;}else if(v==='7'||v==='maj7'){sel.e=7;sel.s=v;}else{sel.e=+v;}cpPlay(sel);cpChanged();};xb.appendChild(b);});
+  const pal=cpPalette(key.mode),fill=(el,arr)=>arr.forEach(([off,q])=>{const c={off,q},b=document.createElement('button');b.type='button';
+    b.className='chip'+(sel.off===off&&sel.q===q?' on':'');b.innerHTML=esc(cpName(c))+'<small>'+esc(romanOf(off,q,key.mode))+'</small>';
+    b.onclick=()=>{const keep=cp[S.cpSel];const nc={off,q};if(keep&&keep.e){nc.e=keep.e;if(keep.s)nc.s=keep.s;}cp[S.cpSel]=nc;cpPlay(nc);cpChanged();};el.appendChild(b);});
+  fill(box.querySelector('.cpdia'),pal.dia);fill(box.querySelector('.cpbor'),pal.bor);
+  const go=()=>{const r=parseChords($('cpText').value);
+    if(r.err){msg(r.err,true);return;}
+    P.cprog=r.list;S.cpSel=r.list.length-1;
+    cpChanged();msg('Je akkoorden staan erin: '+S.chords.map(c=>c.name).join(' – ')+'.');};
+  box.querySelector('.cpt').onclick=go;$('cpText').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();go();}};
+}
+// "Am F C G", "Cmaj7, G/B…" (de bas na / wordt genegeerd) of in trappen "vi IV I V"
+function parseChords(text){
+  const key=musicKey(),toks=String(text||'').split(/[\s,;|–—]+/).map(t=>t.trim()).filter(Boolean);
+  if(!toks.length)return {err:'Typ eerst een paar akkoorden, bv. Am F C G.'};
+  if(toks.length>16)return {err:'Hoogstens 16 akkoorden.'};
+  const LET={C:0,D:2,E:4,F:5,G:7,A:9,B:11},list=[];let ext=0;
+  const qOf=(m,sfx)=>/dim|°|^o$/.test(sfx||'')?'dim':/aug|\+/.test(sfx||'')?'aug':/sus2/.test(sfx||'')?'sus2':/sus/.test(sfx||'')?'sus4':m?'min':'maj';
+  const exOf=x=>!x?0:/13|11/.test(x)?13:/9/.test(x)?9:7;
+  const add=(off,q,x,half)=>{const c={off:(off%12+12)%12,q};if(half){c.q='dim';c.e=7;if(half==='full')c.s='dim7';}else{const e=exOf(x);if(e){c.e=e;if(q==='maj'||q==='sus4'||q==='sus2')c.s=/maj|M7/.test(x)?'maj7':'7';}}list.push(c);};
+  for(const raw of toks){
+    const t=raw.split('/')[0];
+    let m=/^([b#♭♯]?)(VII|VI|V|IV|III|II|I|vii|vi|v|iv|iii|ii|i)(ø7?|m7b5|m7♭5|°|o|dim7?|\+|aug|sus4|sus2|sus)?(maj7|maj9|7|9|11|13|6)?$/.exec(t);
+    if(m){
+      const up=m[2]===m[2].toUpperCase(),i=ROMAN.indexOf(m[2].toUpperCase());
+      const off=SCALE_OFF[key.mode][i]+(/[b♭]/.test(m[1])?-1:/[#♯]/.test(m[1])?1:0),half=/dim7|°7|o7/.test((m[3]||'')+(m[4]||''))?'full':/ø|m7b5|m7♭5/.test(m[3]||'');
+      add(off,qOf(!up,m[3]),m[4],half);continue;
+    }
+    m=/^([A-Ga-g])([#b♯♭]?)(m7b5|m7♭5|ø7?|m(?!aj)|min|-)?(dim7?|°|o|aug|\+|sus4|sus2|sus)?(maj7|maj9|M7|7|9|11|13|6)?$/.exec(t);
+    if(m){
+      const pc=LET[m[1].toUpperCase()]+(/[b♭]/.test(m[2])?-1:/[#♯]/.test(m[2])?1:0),half=/dim7/.test(m[4]||'')||(/°|o/.test(m[4]||'')&&m[5]==='7')?'full':/m7b5|m7♭5|ø/.test(m[3]||'');
+      add(pc-key.tonic,qOf(!!m[3],m[4]),m[5],half);continue;
+    }
+    return {err:'Dit akkoord ken ik niet: "'+raw+'". Probeer bv. Am, F#m, Bb, Gsus4, Cmaj7 of vi.'};
+  }
+  return {list,ext};
 }
 
 function tick(ts){

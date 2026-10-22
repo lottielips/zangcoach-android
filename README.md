@@ -31,6 +31,9 @@ eindpoort dicht, worden galm/echo vervangen door verse (`flushTails`) en wordt d
 (`startTimer`) en plant met het scherm uit 1,5 s vooruit; na een hapering slaat hij gemiste stappen over.
 
 ## Versies
+- **3.10** – Eigen akkoordprogressie: tegel ✎ Eigen akkoorden (`P.cprog`, tot 16 akkoorden relatief t.o.v. de grondtoon,
+  schuift mee met de toonsoort), kiezen uit toonsoort- en geleende akkoorden, sus/verminderd/overmatig, extra kleur per akkoord,
+  intypen als namen (Am F C G7, F#m7b5, Bdim7) of trappen (vi IV I V, bVII, iiø7).
 - **3.9.1** – Melodieraster: gewoon tikken op een noot haalt ze weg (overal op de noot); de noot klinkt pas bij slepen.
 - **3.9** – Opnemen met een Bluetooth-koptelefoon: de app neemt zelf op via `NativeMic` (ingebouwde microfoon,
   UNPROCESSED of VOICE_RECOGNITION, gewone modus) i.p.v. getUserMedia, dat Chromium naar SCO liet schakelen.
