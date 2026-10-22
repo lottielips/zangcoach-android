@@ -1561,7 +1561,7 @@ Object.defineProperty(S,'keyMode',{get:()=>P.key.mode,set:v=>{P.key.mode=v;}});
 Object.defineProperty(S,'manual',{get:()=>({tonic:P.key.tonic,mode:P.key.m}),set:v=>{P.key.tonic=v.tonic;P.key.m=v.mode;}});
 
 /* ---------- bewaren ---------- */
-const APPV='3.11';
+const APPV='3.11.1';
 const STORE='zangcoach-studio';
 let saveT=null,safeT=null;
 // Bewaren gebeurt in twee lagen: localStorage (snel, zoals altijd) en een reservekopie in IndexedDB
@@ -2235,12 +2235,13 @@ function playStep(abs,t0,sd,spb){
   if(n){
     const idx=Math.floor(step/cl)%n,cpos=step%cl,ch=S.chords[idx];
     if(cpos===0){S.vq.push({t:t0,idx});S.arpN=0;S.arpNs={};}
-    for(let li=0;li<nChord();li++)guard('akkoorden',()=>withChord(li,()=>{const b=chordBus(li);if(!(P.mix[b]&&P.mix[b].m))playChordStep(curRhythm(),ch,step,cpos,cl,t,sd,bpos,dest(b));}));
+    for(let li=0;li<nChord();li++)guard('akkoorden',()=>withChord(li,()=>{const b=chordBus(li);playChordStep(curRhythm(),ch,step,cpos,cl,t,sd,bpos,dest(b));}));
   }
   S.sq.push({t,pos,cpos:n?step%cl:0,step});
   // drums
   for(let li=0;li<nBeat();li++)guard('drums',()=>withBeat(li,()=>{
-    const bus=beatBus(li);if(P.mix[bus]&&P.mix[bus].m)return;
+    // ook een gedempt spoor speelt door (op volume 0): dan is het meteen terug als je het weer aanzet
+    const bus=beatBus(li);
     const out=dest(bus),gl=P.glitch/100;
     const fk=li===0?fillAt(pos,step):-1;
     if(fk>=0){
@@ -2271,7 +2272,7 @@ function playStep(abs,t0,sd,spb){
   // melodie en bas
   const key=musicKey(),ch=chordAtStep(step);
   for(const tr of melTracks()){
-    if((P.mix[tr]&&P.mix[tr].m)||(S.hum&&S.hum.tr===tr))continue;
+    if(S.hum&&S.hum.tr===tr)continue;
     guard('melodie',()=>{const T=P.mel[tr],out=dest(tr),nts=melVar(T,playVar(tr,step));
     for(const nt of nts) if(nt.s===pos)playNote(tr,T,nt,nts,step,pos,bpos,t,sd,key,ch,out);});
   }

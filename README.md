@@ -50,6 +50,8 @@ bepaalt hij mee het vertrouwde volume en de timing). Gemeten: ~35% minder rekenw
 Wisselt een deel tijdens het spelen, dan wordt eerst het geluid gepland en pas daarna het scherm bijgewerkt.
 
 ## Versies
+- **3.11.1** – Dempen en terug aanzetten: het spoor is meteen terug. Een gedempt spoor speelt nu door op volume 0
+  (vroeger werden er geen noten gepland, zodat het stil bleef tot de volgende noot of het volgende akkoord).
 - **3.11** – Stabieler en zuiniger: geluidsmotor ~35% minder rekenwerk (zelfde klank), reservekopie van je nummer in
   IndexedDB + redding bij een kapot nummer + veilig opstarten, foutenlog, planner per onderdeel beveiligd, mix-opnames
   blijven bewaard (met Verwijder), grote back-ups in stukjes naar Android, de app herstelt zich als de pagina crasht,
