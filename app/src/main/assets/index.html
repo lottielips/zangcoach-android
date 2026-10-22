@@ -585,7 +585,7 @@ input[type=range]{width:100%;accent-color:var(--amber)}
       <div id="melPager" class="row" style="margin-bottom:6px" hidden><button id="melPrev" class="btn sm" type="button" aria-label="Vorige maat">◀</button><b id="melPageLab" class="mono" style="font-size:13px"></b><button id="melNext" class="btn sm" type="button" aria-label="Volgende maat">▶</button></div>
       <div class="gridwrap"><div id="melGrid" class="sgrid mgrid"></div></div>
       <div class="legend"><span><i style="background:var(--amber)"></i>begin van een noot</span><span><i style="background:var(--amber-soft)"></i>noot klinkt door</span><span><i style="background:color-mix(in srgb,var(--good) 30%,var(--panel2))"></i>past bij het akkoord dat dan klinkt</span></div>
-      <p class="hint"><b>Tekenen:</b> tik in een leeg vakje voor een noot, of tik en schuif naar rechts om hem zo lang te trekken als je wil. <b>Verplaatsen:</b> sleep een noot vanaf haar begin naar een andere toon of tel. <b>Langer of korter:</b> sleep aan het einde van een noot. <b>Weghalen:</b> hou een noot even ingedrukt. Groene vakjes passen bij het akkoord dat op dat moment klinkt (de naam staat bovenaan): daar klinkt een noot altijd mooi.</p>
+      <p class="hint"><b>Tekenen:</b> tik in een leeg vakje voor een noot, of tik en schuif naar rechts om hem zo lang te trekken als je wil. <b>Verplaatsen:</b> sleep een noot vanaf haar begin naar een andere toon of tel. <b>Langer of korter:</b> sleep aan het einde van een noot. <b>Weghalen:</b> tik op een noot. Groene vakjes passen bij het akkoord dat op dat moment klinkt (de naam staat bovenaan): daar klinkt een noot altijd mooi.</p>
     </section>
   </div>
 
@@ -2985,7 +2985,6 @@ function setupMelDraw(){
       D.note=hit;D.mode=s===hit.s?'move':'size';D.off=s-hit.s;
       D.lp=setTimeout(()=>{if(D.moved||S.mdrag!==D)return;pushUndo();T.notes=T.notes.filter(n=>n!==hit);D.done=true;
         try{navigator.vibrate&&navigator.vibrate(25);}catch(_){}save();paintMel();msg('Noot weggehaald. ↶ zet hem terug.');},450);
-      melPreview(tr,hit.r,hit.s,hit.l);
     }else{
       pushUndo();
       const l=Math.min(T.len,melMaxLen(T,null,s,r,N));
@@ -2997,7 +2996,7 @@ function setupMelDraw(){
   });
   box.addEventListener('pointermove',e=>{
     const D=S.mdrag;if(!D||D.done)return;
-    if(!D.moved&&Math.hypot(e.clientX-D.x,e.clientY-D.y)>6){D.moved=true;clearTimeout(D.lp);}
+    if(!D.moved&&Math.hypot(e.clientX-D.x,e.clientY-D.y)>6){D.moved=true;clearTimeout(D.lp);if(D.mode==='move')melPreview(D.tr,D.note.r,D.note.s,D.note.l);}
     if(!D.moved)return;
     const c=melCellAt(e.clientX,e.clientY);if(!c)return;
     const T=P.mel[D.tr],N=patLen(),s=+c.dataset.s,r=+c.dataset.r,n=D.note;
@@ -3015,6 +3014,10 @@ function setupMelDraw(){
   const end=e=>{
     const D=S.mdrag;if(!D)return;S.mdrag=null;clearTimeout(D.lp);S.mPtrT=performance.now();
     try{box.releasePointerCapture(e.pointerId);}catch(_){}
+    // gewoon tikken op een noot (zonder te slepen) = weghalen
+    if(e.type==='pointerup'&&D.mode!=='draw'&&!D.moved&&!D.done&&D.note){
+      const T=P.mel[D.tr];pushUndo();T.notes=T.notes.filter(n=>n!==D.note);save();paintMel();msg('Noot weggehaald. ↶ zet hem terug.');return;
+    }
     if(D.changed&&!D.done)save();
     paintMel();
   };

@@ -12,8 +12,8 @@ android {
         applicationId = "nl.zangcoach.studio"
         minSdk = 29
         targetSdk = 34
-        versionCode = 33
-        versionName = "3.9"
+        versionCode = 34
+        versionName = "3.9.1"
     }
 
     signingConfigs {
